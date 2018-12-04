@@ -1,0 +1,46 @@
+from django.contrib.auth.models import User
+from rest_framework import serializers
+
+from .models import Tenant, UserProfile
+
+
+class TenantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tenant
+        fields = "__all__"
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ("code", "status", "created",
+                  "modified", "user", "owner", "tenant")
+
+
+class UserSerializer(serializers.ModelSerializer):
+    userprofile = UserProfileSerializer(many=False)
+
+    class Meta:
+        model = User
+        fields = ("id", "username", "email", "userprofile")
+
+    def create(self, validated_data):
+        """ 重新创建用户方法 """
+        userprofile_data = validated_data.pop("userprofile")
+        user = User.objects.create(**validated_data)
+        try:
+            UserProfile.objects.create(user=user, **userprofile_data)
+        except Exception as e:
+            user.delete()
+            raise e
+
+        return user
+
+    def update(self, user, validated_data):
+        userprofile_data = validated_data.pop("userprofile")
+        userprofile = UserProfile.objects.get(user=user)
+        userprofile.code = userprofile_data["code"]
+        userprofile.owner = userprofile_data["owner"]
+        userprofile.tenant = userprofile_data["tenant"]
+        userprofile.save()
+        return super().update(user, validated_data)

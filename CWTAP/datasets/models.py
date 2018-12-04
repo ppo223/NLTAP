@@ -1,0 +1,24 @@
+from django.db import models
+from django.contrib.auth.models import User
+
+from users.models import Tenant
+from metas.models import Meta
+
+
+class Dataset(models.Model):
+    """ 数据集表 """
+    uuid = models.CharField("数据集识别号", max_length=255)
+    generate_method = models.CharField("数据集生成方法", max_length=20, default="")
+    generate_rules = models.CharField("数据集生成规则", max_length=255, default="")
+    storage_location = models.CharField("数据集存储位置", max_length=255, default="")
+    business_date = models.CharField("数据集日期", max_length=100, default="")
+    created = models.DateTimeField("数据集创建时间", auto_now_add=True)
+    modified = models.DateTimeField("数据集修改时间", auto_now=True)
+    meta = models.ForeignKey(Meta, on_delete=models.CASCADE)
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, blank=True, null=True)
+    tenant = models.ForeignKey(
+        Tenant, on_delete=models.CASCADE, blank=True, null=True)
+
+    def __str__(self):
+        return self.name
