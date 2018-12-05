@@ -1,0 +1,14 @@
+from rest_framework import serializers
+from .models import KeyWordBase, KeyWord
+
+
+class KeyWordBaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KeyWordBase
+        fields = '__all__'
+
+
+class KeyWordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KeyWord
+        fields = '__all__'

@@ -1,0 +1,158 @@
+import json, time
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from .models import RuleBase, Rule
+from cwtap.tests import create_instances
+
+
+tenant = create_instances([{"name": "租户01", "code": "tenant01"}], "Tenant")[0]
+
+user = create_instances([{"name": "用户01", "tenant": tenant}], "User")[0]
+
+aoj = create_instances([{"name": "机构01", "owner": user,
+                         "tenant": tenant}], "AreaOfJob")[0]
+
+
+class RuleBaseTest(APITestCase):
+    """ 测试规则库 """
+
+    def test_rulebase_create(self):
+        """测试创建规则库"""
+        url = reverse("rules:rulebase-list")
+
+        data = {
+            "name": "规则库01",
+            "code": "rulebase01",
+            "details": "你好，规则库01",
+        }
+
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("规则库01", json.loads(response.content)["name"])
+
+        response = self.client.get(url)
+
+        self.assertEqual("规则库01", json.loads(response.content)[0]["name"])
+
+    def test_rulebase_delete(self):
+        """测试删除规则库"""
+        rulebases = create_instances([{
+            "name": "规则库_02", "code": "rulebase_02",}, {
+            "name": "规则库_03", "code": "rulebase_03",}],
+            "RuleBase")
+
+        id_1 = rulebases[0].id
+        id_2 = rulebases[1].id
+
+        self.assertEqual("规则库_02", RuleBase.objects.get(id=id_1).name)
+        self.assertEqual(2, len(RuleBase.objects.all()))
+
+        url = reverse("rules:rulebase-detail",
+                      args=(rulebases[0].id,))
+
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(1, len(RuleBase.objects.all()))
+        self.assertEqual("规则库_03", RuleBase.objects.get(id=id_2).name)
+
+    def test_rulebase_update(self):
+        """测试修改规则库"""
+        rulebases = create_instances([{
+            "name": "规则库_0401", "code": "rulebase_0401",}, {
+            "name": "规则库_0402", "code": "rulebase_0402",}],
+            "RuleBase")
+
+        id_1 = rulebases[0].id
+        id_2 = rulebases[1].id
+
+        self.assertEqual(2, len(RuleBase.objects.all()))
+        self.assertEqual("规则库_0401", rulebases[0].name)
+
+        url = reverse("rules:rulebase-detail",
+                      args=(id_1,))
+
+        data = {
+            "name": "规则库_0401修改",
+            "code": "rulebase_0401修改",
+            "details": "你好，规则库_0401修改",
+        }
+
+        response = self.client.put(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("规则库_0401修改",
+                         RuleBase.objects.get(id=id_1).name)
+        self.assertEqual("规则库_0402",
+                         RuleBase.objects.get(id=id_2).name)
+
+    def test_rulebase_timeupdate(self):
+        """ 测试规则库的时间修改 """
+        rulebases = create_instances([
+            {"name": "规则库_00", "code": "rulebase_00",},
+        ], "RuleBase")[0]
+
+        created, modified = rulebases.created, rulebases.modified
+
+        time.sleep(1)
+        rulebases.name = "规则库_00_修改"
+        rulebases.save()
+
+        self.assertEqual(rulebases.created, created)
+        self.assertTrue(rulebases.modified > modified)
+
+    def test_rulebase_query(self):
+        """ 测试查询规则库 """
+        knows = create_instances([
+            {"name": "规则库05", "code": "rulebase05"}],
+            "RuleBase")
+
+        url = "{0}?{1}".format(reverse("rules:rulebase-list"),
+                               "name=规则库05")
+
+        response = self.client.get(url)
+
+        query_result = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(knows[0].name, query_result[0]["name"])
+
+    def test_know_aoj_user_relations(self):
+        """ 测试规则库与用户与租户与机构领域关联关系 """
+        rulebases = create_instances([
+            {
+                "name": "规则库06",
+                "code": "rulebase06",
+                "owner": user,
+                "tenant": tenant,
+                "area_of_job": aoj,
+            },
+            {
+                "name": "规则库07",
+                "code": "rulebase07",
+                "owner": user,
+                "tenant": tenant,
+                "area_of_job": aoj,
+            }
+        ], "RuleBase")
+
+        """测试规则库和租户间的关系"""
+        self.assertEqual("租户01", rulebases[1].tenant.name)
+        self.assertEqual(rulebases[0].tenant, rulebases[1].tenant)
+        self.assertEqual(rulebases[0].tenant.name, tenant.name)
+        """测试规则库和用户间的关系"""
+        self.assertEqual("用户01", user.name)
+        self.assertEqual(rulebases[0].owner, rulebases[1].owner)
+        self.assertEqual(rulebases[0].owner.name, user.name)
+        """测试规则库和机构领域的关系"""
+        self.assertEqual("机构01", aoj.name)
+        self.assertEqual(rulebases[0].area_of_job, rulebases[1].area_of_job)
+        self.assertEqual(rulebases[0].area_of_job.name, aoj.name)
+        """测试规则库中租户和用户间的关系"""
+        self.assertEqual("租户01", tenant.name)
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(rulebases[1].owner.tenant.name, tenant.name)

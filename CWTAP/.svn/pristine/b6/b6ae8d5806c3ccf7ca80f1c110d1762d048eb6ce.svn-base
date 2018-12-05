@@ -1,0 +1,8 @@
+from rest_framework import serializers
+from .models import LabelBase
+
+
+class LabelBaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LabelBase
+        fields = '__all__'

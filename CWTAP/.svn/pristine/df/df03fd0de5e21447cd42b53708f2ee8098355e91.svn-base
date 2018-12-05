@@ -1,0 +1,26 @@
+from rest_framework import serializers
+from .models import Model, ModelInstance, ModelTask, ModelTaskExecution
+
+
+class ModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Model
+        fields = '__all__'
+
+
+class ModelInstanceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ModelInstance
+        fields = '__all__'
+
+
+class ModelTaskSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ModelTask
+        fields = '__all__'
+
+
+class ModelTaskExecutionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ModelTaskExecution
+        fields = '__all__'

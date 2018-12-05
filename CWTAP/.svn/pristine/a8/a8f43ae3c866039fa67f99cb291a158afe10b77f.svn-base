@@ -1,0 +1,10 @@
+from cwtap.core import viewsets
+from .models import KnowledgeGraphBase
+from .serializers import KnowledgeGraphBaseSerializer
+
+
+class KnowledgeGraphBaseViewSet(viewsets.CWTAPViewSet):
+    queryset = KnowledgeGraphBase.objects.all()
+    serializer_class = KnowledgeGraphBaseSerializer
+    query_fields = ["name", "code", "details", "status", "created",
+                    "modified", "area_of_job", "owner", "tenant"]

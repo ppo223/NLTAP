@@ -1,0 +1,32 @@
+import sys
+
+from django.test import TestCase
+
+
+class PythonEnvTest(TestCase):
+
+    def test_python_version(self):
+        """ 测试执行 python 版本 """
+        self.assertTrue(sys.version.startswith("3"))
+
+
+class PythonGrammarTest(TestCase):
+
+    variable_01 = "variable_01_value"
+
+    def test_class_variable(self):
+        """ 测试类变量 """
+        self.assertEqual("variable_01_value", self.variable_01)
+        self.assertTrue(self.variable_01 is not None)
+
+    def test_list_none(self):
+        """ 测试 python 列表为空 """
+        self.assertEqual(0, len([]))
+
+    def test_judge_list_type(self):
+        """ 判断列表类型 """
+        self.assertTrue(isinstance([], list))
+
+    def test_string_is_none(self):
+        """ 测试字符串是否为空 """
+        self.assertTrue(not "   ".strip())

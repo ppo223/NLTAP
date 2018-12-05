@@ -1,0 +1,422 @@
+import json
+
+from django.urls import reverse
+from django.conf import settings
+from rest_framework import status
+
+from cwtap.core.test import CWTAPAPITestCase
+from cwtap.core.utils import Utils
+
+
+class FunctionalTest(CWTAPAPITestCase):
+
+    fixtures = ["00.initialize_keywordbases.json"]
+
+    def setUp(self):
+        super().setUp()
+        self.init_li_lei()
+        self.init_han_meimei()
+
+    def init_li_lei(self):
+        # 首先他请管理员帮他创建一个租户
+        data = {
+            "name": "LiLei's Company",
+            "code": "lilei_company",
+            "type": "Personal"
+        }
+        response = self.client.post(reverse("management:tenant-list"),
+                                    data,
+                                    **self.auth_header)
+        li_lei_tenant = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertTrue("id" in li_lei_tenant)
+        self.assertEqual(data["name"], li_lei_tenant["name"])
+        self.assertEqual(data["code"], li_lei_tenant["code"])
+        self.assertEqual(data["type"], li_lei_tenant["type"])
+
+        # 然后请管理员帮他创建自己的用户
+        data = {
+            "username": "li_lei",
+            "password": "li_lei123",
+            "email": "lilei@mail.com",
+            "userprofile": {
+                "code": "lilei",
+                "tenant": li_lei_tenant["id"]
+            }
+        }
+        response = self.client.post(reverse("management:user-list"),
+                                    json.dumps(data),
+                                    content_type="application/json",
+                                    **self.auth_header)
+        li_lei = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertTrue("id" in li_lei)
+        self.assertEqual(data["username"], li_lei["username"])
+        self.assertEqual(li_lei_tenant["id"], li_lei["userprofile"]["tenant"])
+
+        # 然后李雷使用自己的用户进行登录
+        response = self.client.post(
+            reverse("oauth2_provider:token"),
+            data={
+                "grant_type": "password",
+                "username": li_lei["username"],
+                "password": data["password"],
+            },
+            **Utils.get_basic_auth_header(
+                settings.CLIENT_ID,
+                settings.CLIENT_SECRET
+            )
+        )
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+
+        self.li_lei = li_lei
+        self.li_lei_auth_header = Utils.get_auth_header(
+            response_data["access_token"])
+
+    def init_han_meimei(self):
+        # 首先她请管理员帮他创建一个租户
+        data = {
+            "name": "HanMeiMei's Company",
+            "code": "hanmeimei_company",
+            "type": "Personal"
+        }
+        response = self.client.post(reverse("management:tenant-list"),
+                                    data,
+                                    **self.auth_header)
+        han_meimei_tenant = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertTrue("id" in han_meimei_tenant)
+        self.assertEqual(data["name"], han_meimei_tenant["name"])
+        self.assertEqual(data["code"], han_meimei_tenant["code"])
+        self.assertEqual(data["type"], han_meimei_tenant["type"])
+
+        # 然后请管理员帮她创建自己的用户
+        data = {
+            "username": "han_meimei",
+            "password": "han_meimei123",
+            "email": "han_meimei@mail.com",
+            "userprofile": {
+                "code": "han_meimei",
+                "tenant": han_meimei_tenant["id"]
+            }
+        }
+        response = self.client.post(reverse("management:user-list"),
+                                    json.dumps(data),
+                                    content_type="application/json",
+                                    **self.auth_header)
+        han_meimei = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertTrue("id" in han_meimei)
+        self.assertEqual(data["username"], han_meimei["username"])
+        self.assertEqual(han_meimei_tenant["id"],
+                         han_meimei["userprofile"]["tenant"])
+
+        # 然后韩梅梅使用自己的用户进行登录
+        response = self.client.post(
+            reverse("oauth2_provider:token"),
+            data={
+                "grant_type": "password",
+                "username": han_meimei["username"],
+                "password": data["password"],
+            },
+            **Utils.get_basic_auth_header(
+                settings.CLIENT_ID,
+                settings.CLIENT_SECRET
+            )
+        )
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+
+        self.han_meimei = han_meimei
+        self.han_meimei_auth_header = Utils.get_auth_header(
+            response_data["access_token"])
+
+    def test_lexical_analysis(self):
+        """ 词分析功能测试 """
+        # 李雷得知文本分析平台有词分析功能
+        # 他正好有一段话需要做分析，所以他详细查看了接口文档
+        # 因为是词分析功能，所以他想查看一下都有哪些词库
+        kwbase_list_url = reverse("keywords:keywordbase-list")
+        response = self.client.get(kwbase_list_url)
+
+        # 发现因为没有登录，导致无法认证用户
+        self.assertEqual(response.status_code,
+                         status.HTTP_401_UNAUTHORIZED,
+                         response.content)
+
+        # 他先浏览了默认的词库
+        response = self.client.get(kwbase_list_url, **self.li_lei_auth_header)
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+
+        # 他发现默认词库中有通用关键词库和停用词库
+        self.assertTrue(response_data[0]["is_common"])
+        self.assertEqual("通用关键词库", response_data[0]["name"])
+        self.assertEqual("common_business", response_data[0]["code"])
+        self.assertEqual(settings.KEYWORDBASE_TYPE_BUSINESS,
+                         response_data[0]["type"])
+        self.assertTrue(response_data[1]["is_common"])
+        self.assertEqual("通用停用词库", response_data[1]["name"])
+        self.assertEqual(settings.KEYWORDBASE_TYPE_STOP,
+                         response_data[1]["type"])
+
+        # 他发起了一个词分析任务
+
+        # 在查看结果的过程中，发现有些词并没有被分析出来
+
+        # 他创建业务词库，并添加了业务关键词
+        data = {
+            "name": "关键词库",
+            "code": "business",
+            "type": settings.KEYWORDBASE_TYPE_BUSINESS
+        }
+        response = self.client.post(kwbase_list_url,
+                                    data,
+                                    **self.li_lei_auth_header)
+        li_lei_keywordbase = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertTrue("id" in li_lei_keywordbase)
+        self.assertEqual(settings.KEYWORDBASE_TYPE_BUSINESS,
+                         li_lei_keywordbase["type"])
+        self.assertEqual(self.li_lei["id"], li_lei_keywordbase["owner"])
+        self.assertEqual(self.li_lei["userprofile"]["tenant"],
+                         li_lei_keywordbase["tenant"])
+
+        # -!- TO-DO 需要支持批量添加关键词的接口
+        data = {
+            "name": "中金智汇文本分析平台",
+            "keywordbase": li_lei_keywordbase["id"]
+        }
+        response = self.client.post(reverse("keywords:keyword-list"),
+                                    data,
+                                    **self.li_lei_auth_header)
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertEqual(data["name"], response_data["name"])
+        self.assertEqual(li_lei_keywordbase["id"],
+                         response_data["keywordbase"])
+        self.assertEqual(self.li_lei["id"], response_data["owner"])
+        self.assertEqual(self.li_lei["userprofile"]["tenant"],
+                         response_data["tenant"])
+
+        # 之后他重新发送了词分析的请求
+        # 在结果中，发现了被分析出来的业务关键词
+        # 然后他就满意的睡了
+
+    def test_text_dependency(self):
+        """ 句法分析功能测试 """
+        # 韩梅梅得知文本分析平台有句法分析功能
+        # 她想试一下句法分析的功能
+        # 她发送一个句法分析的请求
+        # 发现没有用户认证
+        # 而后她找到管理员帮助她创建了用户和密码
+        # 她登录以后，发送了一个句法分析的功能请求
+        # 她看到了想要的结果以后满意的睡了
+        pass
+
+    def test_emotion(self):
+        """ 情感分析功能测试 """
+        # 李雷得知文本分析平台有情感分析功能
+        # 他通过登录里面发送了一个情感分析的请求
+
+        # 看到结果以后不太满意
+        # 他向管理员请教以后得知可以通过设置情感词来优化结果
+
+        # 他查看现有情感词库中的通用情感词
+        kwbase_list_url = reverse("keywords:keywordbase-list")
+        response = self.client.get(kwbase_list_url, **self.li_lei_auth_header)
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+
+        self.assertTrue(response_data[3]["is_common"])
+        self.assertEqual("通用情感词库", response_data[3]["name"])
+        self.assertEqual("common_emotion", response_data[3]["code"])
+        self.assertEqual(settings.KEYWORDBASE_TYPE_EMOTION,
+                         response_data[3]["type"])
+
+        # 他创建了自己的情感词库，并向其中添加了一些情感词
+        data = {
+            "name": "李雷的情感词库",
+            "code": "emotions",
+            "type": settings.KEYWORDBASE_TYPE_EMOTION
+        }
+        response = self.client.post(kwbase_list_url,
+                                    data,
+                                    **self.li_lei_auth_header)
+        li_lei_keywordbase = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertTrue("id" in li_lei_keywordbase)
+        self.assertEqual(settings.KEYWORDBASE_TYPE_EMOTION,
+                         li_lei_keywordbase["type"])
+        self.assertEqual(self.li_lei["id"], li_lei_keywordbase["owner"])
+        self.assertEqual(self.li_lei["userprofile"]["tenant"],
+                         li_lei_keywordbase["tenant"])
+
+        kword_list_url = reverse("keywords:keyword-list")
+        data = {
+            "name": "骗汇",
+            "keywordbase": li_lei_keywordbase["id"]
+        }
+        response = self.client.post(kword_list_url,
+                                    data,
+                                    **self.li_lei_auth_header)
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertEqual(data["name"], response_data["name"])
+        self.assertEqual(li_lei_keywordbase["id"],
+                         response_data["keywordbase"])
+        self.assertEqual(self.li_lei["id"], response_data["owner"])
+        self.assertEqual(self.li_lei["userprofile"]["tenant"],
+                         response_data["tenant"])
+
+        response = self.client.get(kword_list_url, **self.li_lei_auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+
+        # 然后他重新发送了一个情感分析的请求
+
+        # 最后他看到了想要的结果以后满意的睡了
+
+    def test_similarity(self):
+        """ 相似度分析功能测试 """
+        # 韩梅梅得知文本分析平台有相似度分析的功能
+        # 她登录以后发送了一个相似度分析的请求
+        # 她看到了想要的结果以后满意的睡了
+        pass
+
+    def test_text_correction(self):
+        """ 文本纠错分析功能测试 """
+        # 李雷得知文本分析平台有文本纠错的功能
+        # 他登录以后发送了一个文本纠错功能的请求
+
+        # 他看到了结果以后发现预想的词没有被纠错
+        # 他向管理员询问了优化的方法
+        # 首先他查看了通用的纠错词库中的纠错词
+        kwbase_list_url = reverse("keywords:keywordbase-list")
+        response = self.client.get(kwbase_list_url, **self.li_lei_auth_header)
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+
+        self.assertTrue(response_data[5]["is_common"])
+        self.assertEqual("通用纠错词库", response_data[5]["name"])
+        self.assertEqual("common_correct", response_data[5]["code"])
+        self.assertEqual(settings.KEYWORDBASE_TYPE_CORRECT,
+                         response_data[5]["type"])
+        # 然后他创建了自己的纠错词库
+        data = {
+            "name": "李雷的纠错词库",
+            "code": "corrects",
+            "type": settings.KEYWORDBASE_TYPE_CORRECT
+        }
+        response = self.client.post(kwbase_list_url,
+                                    data,
+                                    **self.li_lei_auth_header)
+        li_lei_keywordbase = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertTrue("id" in li_lei_keywordbase)
+        self.assertEqual(settings.KEYWORDBASE_TYPE_CORRECT,
+                         li_lei_keywordbase["type"])
+        self.assertEqual(self.li_lei["id"], li_lei_keywordbase["owner"])
+        self.assertEqual(self.li_lei["userprofile"]["tenant"],
+                         li_lei_keywordbase["tenant"])
+
+        # 并添加了纠错词
+        kword_list_url = reverse("keywords:keyword-list")
+        data = {
+            "name": "有人说京东的物留很快",
+            "keywordbase": li_lei_keywordbase["id"]
+        }
+        response = self.client.post(kword_list_url,
+                                    data,
+                                    **self.li_lei_auth_header)
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertEqual(data["name"], response_data["name"])
+        self.assertEqual(li_lei_keywordbase["id"],
+                         response_data["keywordbase"])
+        self.assertEqual(self.li_lei["id"], response_data["owner"])
+        self.assertEqual(self.li_lei["userprofile"]["tenant"],
+                         response_data["tenant"])
+
+        response = self.client.get(kword_list_url, **self.li_lei_auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+
+        # 最后发重新发送了文本纠错功能的请求
+
+        # 他看到了想要的结果以后满意的睡了
+        pass
+
+    def test_word_association_train(self):
+        """ 词语联想模型训练功能测试 """
+        pass
+
+    def test_word_association_predict(self):
+        """ 词语联想模型预测功能测试 """
+        pass
+
+    def test_word_discovery(self):
+        """ 新词发现功能测试 """
+        pass
+
+    def test_classification_train(self):
+        """ 分类训练功能测试 """
+        pass
+
+    def test_classification_predict(self):
+        """ 分类预测功能测试 """
+        pass
+
+    def test_cluster_analysis(self):
+        """ 聚类分析功能测试 """
+        pass

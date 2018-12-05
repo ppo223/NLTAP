@@ -1,0 +1,111 @@
+from django.utils import dateparse
+from rest_framework import viewsets
+
+from .models import Tenant, User
+from .serializers import TenantSerializer, UserSerializer
+
+
+class TenantViewSet(viewsets.ModelViewSet):
+    queryset = Tenant.objects.all()
+    serializer_class = TenantSerializer
+
+    def get_queryset(self):
+        queryset = Tenant.objects.all()
+        name = self.request.query_params.get("name", None)
+        if name is not None:
+            queryset = queryset.filter(name=name)
+
+        code = self.request.query_params.get("code", None)
+        if code is not None:
+            queryset = queryset.filter(code=code)
+
+        status = self.request.query_params.get("status", None)
+        if status is not None:
+            queryset = queryset.filter(status=status)
+
+        type = self.request.query_params.get("type", None)
+        if type is not None:
+            queryset = queryset.filter(type=type)
+
+        created = self.request.query_params.get("created", None)
+        if created is not None:
+            start, end = created.split("to")
+            if start and start.strip() != '':
+                queryset = queryset.filter(
+                    created__gte=dateparse.parse_datetime(start.strip()))
+
+            if end and end.strip() != '':
+                queryset = queryset.filter(
+                    created__lte=dateparse.parse_datetime(end.strip()))
+
+        modified = self.request.query_params.get("modified", None)
+        if modified is not None:
+            start, end = modified.split("to")
+            if start and start.strip() != '':
+                queryset = queryset.filter(
+                    modified__gte=dateparse.parse_datetime(start.strip()))
+
+            if end and end.strip() != '':
+                queryset = queryset.filter(
+                    modified__lte=dateparse.parse_datetime(end.strip()))
+
+        return queryset
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+    def get_queryset(self):
+        queryset = User.objects.all()
+        name = self.request.query_params.get("name", None)
+        if name is not None:
+            queryset = queryset.filter(name=name)
+
+        code = self.request.query_params.get("code", None)
+        if code is not None:
+            queryset = queryset.filter(code=code)
+
+        status = self.request.query_params.get("status", None)
+        if status is not None:
+            queryset = queryset.filter(status=status)
+
+        type = self.request.query_params.get("type", None)
+        if type is not None:
+            queryset = queryset.filter(type=type)
+
+        email = self.request.query_params.get("email", None)
+        if email is not None:
+            queryset = queryset.filter(email=email)
+
+        password = self.request.query_params.get("password", None)
+        if password is not None:
+            queryset = queryset.filter(password=password)
+
+        owner = self.request.query_params.get("owner", None)
+        if owner is not None:
+            queryset = queryset.filter(owner=owner)
+
+        created = self.request.query_params.get("created", None)
+        if created is not None:
+            start, end = created.split("to")
+            if start and start.strip() != '':
+                queryset = queryset.filter(
+                    created__gte=dateparse.parse_datetime(start.strip()))
+
+            if end and end.strip() != '':
+                queryset = queryset.filter(
+                    created__lte=dateparse.parse_datetime(end.strip()))
+
+        modified = self.request.query_params.get("modified", None)
+        if modified is not None:
+            start, end = modified.split("to")
+            if start and start.strip() != '':
+                queryset = queryset.filter(
+                    modified__gte=dateparse.parse_datetime(start.strip()))
+
+            if end and end.strip() != '':
+                queryset = queryset.filter(
+                    modified__lte=dateparse.parse_datetime(end.strip()))
+
+        return queryset

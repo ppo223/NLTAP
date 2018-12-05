@@ -1,0 +1,458 @@
+import json, time
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from .models import ModelBase, Model, ModelInstance
+from cwtap.tests import create_instances
+
+
+tenant = create_instances([{"name": "租户01", "code": "tenant01"}], "Tenant")[0]
+
+user = create_instances([{"name": "用户01", "tenant": tenant}], "User")[0]
+
+aoj = create_instances([{"name": "机构01", "owner": user,
+                         "tenant": tenant}], "AreaOfJob")[0]
+
+modelbase = create_instances([
+    {"name": "模型库01", "owner": user, "tenant": tenant,
+     "area_of_job": aoj}], "ModelBase")[0]
+
+model = create_instances([
+    {"name": "模型01", "owner": user, "tenant": tenant,
+     "modelbase": modelbase}], "Model")[0]
+
+
+class ModelBaseTest(APITestCase):
+    """ 测试模型库表 """
+
+    def test_modelbase_create(self):
+        """ 测试模型库创建 """
+        url = reverse("models:modelbase-list")
+        data = {"name": "模型库01",
+                "code": "modelbase01",
+                "details": "你好，模型库01"}
+
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("模型库01", json.loads(response.content)["name"])
+
+        response = self.client.get(url)
+
+        self.assertEqual("模型库01", json.loads(response.content)[0]["name"])
+
+    def test_modelbase_delete(self):
+        """ 测试模型库删除 """
+        modelbases = create_instances([{
+            "name": "模型库_02", "code": "modelbase_02"}, {
+            "name": "模型库_03", "code": "modelbase_03"}], "ModelBase")
+
+        id_1 = modelbases[0].id
+        id_2 = modelbases[1].id
+
+        self.assertEqual("模型库_02", modelbases[0].name)
+        self.assertEqual(2, len(ModelBase.objects.all()))
+
+        url = reverse("models:modelbase-detail", args=(id_1,))
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(1, len(ModelBase.objects.all()))
+        self.assertEqual("模型库_03", ModelBase.objects.get(id=id_2).name)
+
+    def test_modelbase_update(self):
+        """ 测试模型库修改 """
+        modelbases = create_instances([
+            {"name": "模型库_0401", "code": "modelbase_0401"},
+            {"name": "模型库_0402", "code": "modelbase_0402"}], "ModelBase")
+
+        id_1 = modelbases[0].id
+        id_2 = modelbases[1].id
+
+        self.assertEqual("模型库_0401", modelbases[0].name)
+        self.assertEqual(2, len(ModelBase.objects.all()))
+
+        url = reverse("models:modelbase-detail", args=(id_1,))
+
+        data = {"name": "模型库_0401修改",
+                "code": "modelbase_0401修改",
+                "details": "你好，模型库_0401修改"}
+
+        response = self.client.put(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("模型库_0401修改", ModelBase.objects.get(id=id_1).name)
+        self.assertEqual("模型库_0402", ModelBase.objects.get(id=id_2).name)
+
+    def test_modelbase_timeupdate(self):
+        """ 测试模型库的时间修改 """
+        modelbases = create_instances([
+            {"name": "模型库_00", "code": "modelbase_00"}], "ModelBase")[0]
+
+        created, modified = modelbases.created, modelbases.modified
+        
+        time.sleep(1)
+        modelbases.name = "模型库_00_修改"
+        modelbases.save()
+
+        self.assertEqual(modelbases.created, created)
+        self.assertTrue(modelbases.modified > modified)
+
+    def test_modelbase_query(self):
+        """ 测试模型库查询 """
+        modelbases = create_instances([
+            {"name": "模型库05", "code": "modelbase05"}], "ModelBase")
+
+        url = "{0}?{1}".format(reverse("models:modelbase-list"),
+                               "name=模型库05")
+        
+        response = self.client.get(url)
+        
+        query_result = json.loads(response.content)
+        
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(modelbases[0].name, query_result[0]["name"])
+
+    def test_know_aoj_user_relations(self):
+        """ 试模型库与用户与租户与机构领域关联关系 """
+        modelbases = create_instances([
+            {"name": "模型库06",
+             "code": "modelbase06",
+             "owner": user,
+             "tenant": tenant,
+             "area_of_job": aoj},
+
+            {"name": "模型库07",
+             "code": "modelbase07",
+             "owner": user,
+             "tenant": tenant,
+             "area_of_job": aoj}], "ModelBase")
+
+        # 测试模型库和租户间的关系
+        self.assertEqual("租户01", tenant.name)
+        self.assertEqual(modelbases[0].tenant, modelbases[1].tenant)
+        self.assertEqual(modelbases[0].tenant.name, tenant.name)
+        # 测试模型库和用户间的关系
+        self.assertEqual("用户01", user.name)
+        self.assertEqual(modelbases[0].owner, modelbases[1].owner)
+        self.assertEqual(modelbases[0].owner.name, user.name)
+        # 测试模型库和机构领域的关系
+        self.assertEqual("机构01", aoj.name)
+        self.assertEqual(modelbases[0].area_of_job, modelbases[1].area_of_job)
+        self.assertEqual(modelbases[0].area_of_job.name, aoj.name)
+        # 测试模型库中租户和用户间的关系
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(modelbases[1].owner.tenant.name, tenant.name)
+
+
+class ModelTest(APITestCase):
+    """ 测试模型表 """
+
+    def test_model_create(self):
+        """ 测试模型创建 """
+        url = reverse("models:model-list")
+        data = {"name": "模型00",
+                "code": "model00"}
+
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(["This field is required."],
+                         json.loads(response.content)["type"])
+
+        data = {"name": "模型01",
+                "code": "model01",
+                "type": "类型01"}
+
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("模型01", json.loads(response.content)["name"])
+
+        response = self.client.get(url)
+
+        self.assertEqual("模型01", json.loads(response.content)[0]["name"])
+
+    def test_model_delete(self):
+        """ 测试模型删除 """
+        models = create_instances([
+            {"name": "模型02",
+             "code": "model02",
+             "details": "你好，模型02",
+             "type": "类型02"},
+
+            {"name": "模型03",
+             "code": "model03",
+             "details": "你好，模型03",
+             "type": "类型03"}], "Model")
+
+        id_1 = models[0].id
+        id_2 = models[1].id
+
+        self.assertEqual("模型02", Model.objects.get(id=id_1).name)
+        self.assertEqual(2, len(Model.objects.all()))
+
+        url = reverse("models:model-detail", args=(id_1,))
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(1, len(Model.objects.all()))
+        self.assertEqual("模型03", Model.objects.get(id=id_2).name)
+
+    def test_models_update(self):
+        """ 测试模型修改 """
+        models = create_instances([
+            {"name": "模型_0401",
+             "code": "model_0401",
+             "details": "你好，模型_0401",
+             "type": "类型_0401"},
+
+            {"name": "模型_0402",
+             "code": "model_0402",
+             "details": "你好，模型_0402",
+             "type": "类型_0402"}], "Model")
+
+        id_1 = models[0].id
+        id_2 = models[1].id
+
+        self.assertEqual("模型_0401", Model.objects.get(id=id_1).name)
+        self.assertEqual(2, len(Model.objects.all()))
+
+        url = reverse("models:model-detail", args=(id_2,))
+        data = {"name": "模型_0402修改",
+                "code": "model_0402修改",
+                "details": "你好，模型_0402修改",
+                "type": "类型_0402"}
+
+        response = self.client.put(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("模型_0401", Model.objects.get(id=id_1).name)
+        self.assertEqual("模型_0402修改", Model.objects.get(id=id_2).name)
+
+    def test_models_timeupdate(self):
+        """ 测试模型时间修改 """
+        models = create_instances([
+            {"name": "模型_00",
+             "code": "model_00",
+             "type": "类型_00"}], "Model")[0]
+
+        created, modified = models.created, models.modified
+
+        time.sleep(1)
+        models.name = "模型_00_修改"
+        models.save()
+
+        self.assertEqual(models.created, created)
+        self.assertTrue(models.modified > modified)
+
+    def test_models_query(self):
+        """ 测试查询模型 """
+        models = create_instances([
+            {"name": "模型05", "code": "model05", "type": "类型05"}], "Model")
+
+        url = "{0}?{1}".format(reverse("models:model-list"),
+                               "name=模型05")
+
+        response = self.client.get(url)
+
+        query_result = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(models[0].name, query_result[0]["name"])
+
+    def test_model_aoj_user_relations(self):
+        """ 测试模型与机构领域与用户与租户关联关系 """
+        models = create_instances([
+            {"name": "模型06",
+             "code": "model06",
+             "type": "类型06",
+             "owner": user,
+             "tenant": tenant,
+             "modelbase": modelbase},
+
+            {"name": "模型07",
+             "code": "model07",
+             "type": "类型07",
+             "owner": user,
+             "tenant": tenant,
+             "modelbase": modelbase}], "Model")
+
+        # 测试模型和租户间的关系
+        self.assertEqual("租户01", tenant.name)
+        self.assertEqual(models[0].tenant, models[1].tenant)
+        self.assertEqual(models[0].tenant.name, tenant.name)
+        # 测试模型和用户间的关系
+        self.assertEqual("用户01", user.name)
+        self.assertEqual(models[0].owner, models[1].owner)
+        self.assertEqual(models[0].owner.name, user.name)
+        # 测试模型和模型库的关系
+        self.assertEqual("模型库01", modelbase.name)
+        self.assertEqual(models[0].modelbase, models[1].modelbase)
+        self.assertEqual(models[0].modelbase.name, modelbase.name)
+        # 测试模型中租户和用户间的关系
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(models[1].owner.tenant.name, tenant.name)
+
+
+class ModelInstanceTest(APITestCase):
+    """ 模型实例测试类 """
+
+    def test_modelinstance_create(self):
+        """ 测试模型实例创建 """
+        url = reverse("models:modelinstance-list")
+
+        data = {
+                "uuid": "实例号_00",
+                "storage_location": "实例存储00",
+                }
+        
+        response = self.client.post(url, data)
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(["This field is required."], 
+                         json.loads(response.content)["name"])
+
+        data = {"name": "实例01",
+                "uuid": "实例号_01",
+                "storage_location": "实例存储01",
+                }
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("实例01", json.loads(response.content)["name"])
+
+        response = self.client.get(url)
+
+        self.assertEqual("实例01", json.loads(response.content)[0]["name"])
+
+    def test_modelinstance_delete(self):
+        """ 测试实例删除 """
+        modelinstances = create_instances([
+            {"name": "实例02",
+             "uuid": "实例号_02",
+             "storage_location": "实例存储02",
+             },
+            {"name": "实例03",
+             "uuid": "实例号_03",
+             "storage_location": "实例存储03",
+             }
+        ], "ModelInstance")
+
+        id_1 = modelinstances[0].id
+        id_2 = modelinstances[1].id
+
+        self.assertEqual(2, len(ModelInstance.objects.all()))
+        self.assertEqual("实例02", ModelInstance.objects.get(id=id_1).name)
+
+        url = reverse("models:modelinstance-detail", args=(id_1,))
+
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(1, len(ModelInstance.objects.all()))
+        self.assertEqual("实例03", ModelInstance.objects.get(id=id_2).name)
+
+    def test_modelsinstance_update(self):
+        """ 测试实例修改 """
+        modelinstances = create_instances([
+            {"name": "实例_0401",
+             "uuid": "实例号_0401",
+             "storage_location": "实例存储_0401",
+             },
+            {"name": "实例_0402",
+             "uuid": "实例号_0402",
+             "storage_location": "实例存储_0402",
+             }
+        ], "ModelInstance")
+
+        id_1 = modelinstances[0].id
+        id_2 = modelinstances[1].id
+
+        self.assertEqual(2, len(ModelInstance.objects.all()))
+        self.assertEqual("实例_0401", ModelInstance.objects.get(id=id_1).name)
+
+        url = reverse("models:modelinstance-detail", args=(id_2,))
+        data = {"name": "实例_0402修改",
+                "uuid": "实例号_0402修改",
+                "storage_location": "实例存储_0402修改",
+                }
+        response = self.client.put(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("实例_0401", ModelInstance.objects.get(id=id_1).name)
+        self.assertEqual("实例_0402修改", ModelInstance.objects.get(id=id_2).name)
+
+    def test_modelinstance_timeupdate(self):
+        """ 测试实例时间修改 """
+        modelinstances = create_instances([
+            {"name": "实例05",
+             "uuid": "实例号05",
+             "storage_location": "实例存储05",
+             }
+        ], "ModelInstance")[0]
+
+        created, modified = modelinstances.created, modelinstances.modified
+
+        time.sleep(1)
+        modelinstances.name = "模型05_修改"
+        modelinstances.save()
+
+        self.assertEqual(modelinstances.created, created)
+        self.assertTrue(modelinstances.modified > modified)
+
+    def test_modelinstance_query(self):
+        """ 测试实例查询 """
+        modelinstances = create_instances([
+            {"name": "实例06",
+             "uuid": "实例号06",
+             "storage_location": "实例存储06",
+             }], "ModelInstance")
+        url = "{0}?{1}".format(reverse("models:modelinstance-list"),
+                               "name=实例06")
+
+        response = self.client.get(url)
+
+        query_result = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(modelinstances[0].name, query_result[0]["name"])
+
+    def test_modelinstance_model_user_relations(self):
+        """ 测试实例与模型与用户与租户间关系 """
+        modelinstances = create_instances([
+            {"name": "实例07",
+             "uuid": "实例号07",
+             "storage_location": "实例存储07",
+             "owner": user,
+             "tenant": tenant,
+             "model": model
+             },
+            {"name": "实例08",
+             "uuid": "实例号08",
+             "storage_location": "实例存储08",
+             "owner": user,
+             "tenant": tenant,
+             "model": model
+             }
+        ], "ModelInstance")
+
+        # 测试实例和租户间的关系
+        self.assertEqual("租户01", tenant.name)
+        self.assertEqual(modelinstances[0].tenant, modelinstances[1].tenant)
+        self.assertEqual(modelinstances[0].tenant.name, tenant.name)
+        # 测试实例和用户间的关系
+        self.assertEqual("用户01", user.name)
+        self.assertEqual(modelinstances[0].owner, modelinstances[1].owner)
+        self.assertEqual(modelinstances[0].owner.name, user.name)
+        # 测试实例和模型的关系
+        self.assertEqual("模型01", model.name)
+        self.assertEqual(modelinstances[0].model, modelinstances[1].model)
+        self.assertEqual(modelinstances[0].model.name, model.name)
+        # 测试实例中租户和用户间的关系
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(modelinstances[1].owner.tenant.name, tenant.name)

@@ -1,0 +1,8 @@
+from rest_framework import serializers
+from .models import CorpusBase
+
+
+class CorpusBaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CorpusBase
+        fields = '__all__'

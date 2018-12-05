@@ -1,0 +1,18 @@
+from rest_framework.test import APITestCase
+from django.urls import reverse
+from rest_framework import status
+
+
+class AreaOfJobTest(APITestCase):
+
+    def test_aoj_create(self):
+        url = reverse("area_of_job:areaofjob-list")
+        data = {
+            "name": "机构01",
+            "code": "jigou01",
+            "type": "类型01",
+            "details": "你好，机构01",
+        }
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)

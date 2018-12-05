@@ -1,0 +1,211 @@
+import json
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from users.models import Tenant, User
+from area_of_jobs.models import AreaOfJob
+from .models import CorpusBase
+
+
+class CorpusTest(APITestCase):
+
+    def create_tenants(self, tenants):
+        result = []
+        for tenant in tenants:
+            t = Tenant(**tenant)
+            t.save()
+            result.append(t)
+
+        return result
+
+    def create_users(self, users):
+        result = []
+        for user in users:
+            u = User(**user)
+            u.save()
+            result.append(u)
+
+        return result
+
+    def create_aojs(self, aojs):
+        result = []
+        for aoj in aojs:
+            a = AreaOfJob(**aoj)
+            a.save()
+            result.append(a)
+
+        return result
+
+    def create_corpus(self, corpus):
+        result = []
+        for cor in corpus:
+            c = CorpusBase(**cor)
+            c.save()
+            result.append(c)
+
+        return result
+
+
+    def test_corpus_create(self):
+        """测试创建语料库"""
+        url = reverse("corpus:corpusbase-list")
+        data = {
+            # "name": "语料库01",
+            "code": "yuliao01",
+            "details": "你好，预料库01",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(["This field is required."], json.loads(response.content)["name"])
+
+        data = {
+            "name": "语料库01",
+            "code": "yuliao01",
+            "details": "你好，预料库01",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("语料库01", json.loads(response.content)["name"])
+        response = self.client.get(url)
+        self.assertEqual("语料库01", json.loads(response.content)[0]["name"])
+
+    def test_corpus_delete(self):
+        """测试删除语料库"""
+        corpus = self.create_corpus([{
+            "name": "语料库02",
+            "code": "yuliao02",
+            "details": "你好，语料库02",
+        },{
+            "name": "语料库03",
+            "code": "yuliao03",
+            "details": "你好，语料库03",
+        }])
+
+        self.assertEqual("语料库02", corpus[0].name)
+        self.assertEqual("语料库03", corpus[1].name)
+
+        url = reverse("corpus:corpusbase-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(2, len(json.loads(response.content)))
+        self.assertEqual("语料库02", json.loads(response.content)[0]["name"])
+        self.assertEqual("语料库03", json.loads(response.content)[1]["name"])
+
+        self.assertEqual(2, len(CorpusBase.objects.all()))
+        CorpusBase.objects.filter(id=2).delete()
+        self.assertEqual(1, len(CorpusBase.objects.all()))
+
+        url = reverse("corpus:corpusbase-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(json.loads(response.content)))
+        self.assertEqual("语料库02", json.loads(response.content)[0]['name'])
+
+        data = {"name": "语料库03"}
+        self.assertEqual(json.loads(self.client.get(url, data).content), [])
+
+    def test_corpus_update(self):
+        """测试修改语料库"""
+        corpus = self.create_corpus([{
+            "name": "语料库_0401",
+            "code": "yuliao_0401",
+        },{
+            "name": "语料库_0402",
+            "code": "yuliao_0402",
+        }])
+
+        self.assertEqual("语料库_0401", corpus[0].name)
+        self.assertEqual("语料库_0402", corpus[1].name)
+
+        url = reverse("corpus:corpusbase-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(2, len(json.loads(response.content)))
+
+        url = reverse("corpus:corpusbase-detail", args=(2,))
+        data = {
+            "name": "语料库_0402_修改",
+            "code": "yuliao_0402_修改",
+            "details": "你好，语料库_0402_修改",
+        }
+        response = self.client.put(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("语料库_0401", CorpusBase.objects.get(id=1).name)
+
+        url = reverse("corpus:corpusbase-list")
+        response = self.client.get(url)
+        self.assertEqual("语料库_0402_修改", json.loads(response.content)[1]["name"])
+        self.assertEqual("语料库_0401", json.loads(response.content)[0]["name"])
+
+    def test__corpus_query(self):
+        """ 测试查询语料库 """
+        corpus = self.create_corpus([
+            {"name": "语料库05", "code": "yuliao05"},
+            ])
+
+        url = "{0}?{1}".format(reverse("corpus:corpusbase-list"),
+                               "name=语料库05")
+        response = self.client.get(url)
+        query_result = json.loads(response.content)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(corpus[0].name, query_result[0]["name"])
+
+    def test_aoj_user_relations(self):
+        """测试语料库与用户与租户与机构领域关联关系"""
+        tenant = self.create_tenants([
+            {"name": "租户01", "code": "tenant01", "type": "类型01"},
+        ])[0]
+
+        user = self.create_users([
+            {
+                "name": "用户01",
+                "code": "user01",
+                "email": "user01@mail.com",
+                "password": "user123",
+                "tenant": tenant
+            },
+        ])[0]
+
+        aoj = self.create_aojs([
+            {
+                "name": "机构01",
+                "code": "jigou01",
+                "owner": user,
+                "tenant": tenant,
+            }
+        ])[0]
+
+        corpus = self.create_corpus([
+            {
+                "name": "语料库06",
+                "code": "yuliao06",
+                "owner": user,
+                "tenant": tenant,
+                "area_of_job": aoj,
+            },
+            {
+                "name": "语料库07",
+                "code": "yuliao07",
+                "owner": user,
+                "tenant": tenant,
+                "area_of_job": aoj,
+            }
+        ])
+        """测试语料库和租户间的关系"""
+        self.assertEqual(corpus[0].tenant, corpus[1].tenant)
+        self.assertEqual(corpus[0].tenant.name, tenant.name)
+        self.assertEqual(corpus[1].tenant.name, tenant.name)
+        """测试语料库和用户间的关系"""
+        self.assertEqual(corpus[0].owner, corpus[1].owner)
+        self.assertEqual(corpus[0].owner.name, user.name)
+        self.assertEqual(corpus[1].owner.name, user.name)
+        """测试语料库和机构领域的关系"""
+        self.assertEqual(corpus[0].area_of_job, corpus[1].area_of_job)
+        self.assertEqual(corpus[0].area_of_job.name, aoj.name)
+        self.assertEqual(corpus[1].area_of_job.name, aoj.name)
+        """测试语料库中租户和用户间的关系"""
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(corpus[1].owner.tenant.name, tenant.name)
+        self.assertEqual(corpus[1].owner.tenant.name, user.tenant.name)

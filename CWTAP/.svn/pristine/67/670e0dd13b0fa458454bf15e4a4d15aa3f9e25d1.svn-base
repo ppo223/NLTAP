@@ -1,0 +1,150 @@
+from rest_framework.test import APITestCase
+from django.urls import reverse
+from rest_framework import status
+import json
+from .models import AreaOfJob
+from users.models import Tenant, User
+
+
+class AreaOfJobTest(APITestCase):
+
+    def create_tenants(self, tenants):
+        result = []
+        for tenant in tenants:
+            t = Tenant(**tenant)
+            t.save()
+            result.append(t)
+
+        return result
+
+    def create_aojs(self, aojs):
+        result = []
+        for aoj in aojs:
+            a = AreaOfJob(**aoj)
+            a.save()
+            result.append(a)
+
+        return result
+
+    def test_aoj_create(self):
+        """测试创建机构领域"""
+        url = reverse("area_of_job:areaofjob-list")
+        data = {
+            "name": "机构01",
+            "code": "jigou01",
+            "details": "你好，机构01",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("机构01", json.loads(response.content)["name"])
+
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("jigou01", json.loads(response.content)[0]['code'])
+
+    def test_aoj_delete(self):
+        """测试删除机构领域"""
+        url = reverse("area_of_job:areaofjob-list")
+        data = {
+            "name": "机构02",
+            "code": "jigou02",
+            "details": "你好，机构02",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("机构02", json.loads(response.content)["name"])
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        url = reverse("area_of_job:areaofjob-list")
+        data = {
+            "name": "机构03",
+            "code": "jigou03",
+            "details": "你好，机构03",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertEqual(2, len(AreaOfJob.objects.all()))
+        AreaOfJob.objects.filter(id=1).delete()
+        self.assertEqual(1, len(AreaOfJob.objects.all()))
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("机构03", json.loads(response.content)[0]['name'])
+        self.assertEqual("jigou03", json.loads(response.content)[0]['code'])
+
+    def test_aoj_update(self):
+        """测试修改机构领域"""
+        url = reverse("area_of_job:areaofjob-list")
+        data = {
+            "name": "机构04",
+            "code": "jigou04",
+            "details": "你好，机构04",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("机构04", json.loads(response.content)["name"])
+
+        pk = json.loads(response.content)["id"]
+        url = reverse("area_of_job:areaofjob-detail", args=(pk,))
+        data = {
+            "name": "机构04修改",
+            "code": "jigou04修改",
+            "details": "你好，机构04修改",
+        }
+        response = self.client.put(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("机构04修改", AreaOfJob.objects.get(id=1).name)
+        response = self.client.get(url)
+        self.assertEqual("机构04修改", json.loads(response.content)["name"])
+
+    def test_aoj_query01(self):
+        """测试查询机构领域"""
+        url = reverse("area_of_job:areaofjob-list")
+        data = {
+            "name": "机构05",
+            "code": "jigou05",
+            "details": "你好，机构05",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.get(url)
+        self.assertEqual("机构05", json.loads(response.content)[0]["name"])
+
+    def test__aoj02_query(self):
+        """ 测试查询租户 """
+        aojs = self.create_aojs([
+            {"name": "机构06", "code": "aoj06"},
+            {"name": "机构07", "code": "aoj07"},
+            ])
+
+        url = "{0}?{1}".format(reverse("area_of_job:areaofjob-list"),
+                               "name=机构06")
+        response = self.client.get(url)
+        query_result = json.loads(response.content)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(aojs[0].name, query_result[0]["name"])
+
+    def test_aoj_relations(self):
+        """ 测试机构领域关系 """
+        tenant = self.create_tenants([
+            {"name": "租户00", "code": "tenant00", "type": "类型00"},
+        ])[0]
+        aojs = self.create_aojs([
+            {
+                "name": "机构06",
+                "code": "jigou06",
+                "tenant": tenant
+            },
+            {
+                "name": "机构07",
+                "code": "jigou07",
+                "tenant": tenant
+            }
+        ])
+
+        self.assertEqual(aojs[0].tenant, aojs[1].tenant)
+        self.assertEqual(tenant.name, aojs[0].tenant.name)

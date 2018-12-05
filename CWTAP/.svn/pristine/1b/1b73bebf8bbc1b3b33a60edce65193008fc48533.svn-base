@@ -1,0 +1,224 @@
+import json
+
+from django.utils import timezone
+from django.urls import reverse
+from django.conf import settings
+from django.forms.models import model_to_dict
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from .models import Tenant, User
+
+
+class TenantTest(APITestCase):
+
+    def create_tenants(self, tenants):
+        result = []
+        for tenant in tenants:
+            t = Tenant(**tenant)
+            t.save()
+            result.append(t)
+
+        return result
+
+    def test_create_tenant(self):
+        """ 测试创建租户 """
+        url = reverse("management:tenant-list")
+        data = {
+            "name": "租户_001",
+            "code": "tenant_001",
+            "type": "类型_001",
+            "details": "这里是租户_001",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        pk = json.loads(response.content)["id"]
+        t = Tenant.objects.get(pk=pk)
+
+        self.assertEqual(data["name"], t.name)
+        self.assertEqual(data["code"], t.code)
+        self.assertEqual(data["type"], t.type)
+        self.assertEqual(data["details"], t.details)
+        self.assertEqual(settings.STATUS_ENABLE, t.status)
+
+    def test_list_tenant(self):
+        """ 测试获取租户列表 """
+        self.create_tenants([
+            {"name": "租户_002", "code": "tenant_002", "type": "类型_002"},
+            {"name": "租户_003", "code": "tenant_003", "type": "类型_003"},
+        ])
+
+        response = self.client.get(reverse("management:tenant-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(2, len(json.loads(response.content)))
+
+    def test_update_tenant(self):
+        """ 测试更新租户 """
+        tenants = self.create_tenants([
+            {"name": "租户_004", "code": "tenant_004", "type": "类型_004"},
+            {"name": "租户_005", "code": "tenant_005", "type": "类型_005"},
+        ])
+        tenant_004 = model_to_dict(tenants[0])
+
+        self.assertEqual("租户_004", tenant_004["name"])
+
+        url = reverse("management:tenant-detail", args=(tenant_004["id"],))
+        tenant_004["name"] = "租户_004_修改"
+        response = self.client.put(url, tenant_004)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            "租户_004_修改", Tenant.objects.get(pk=tenant_004["id"]).name)
+
+    def test_tenant_update_auto_now(self):
+        """ 测试 modified 字段 auto_now 属性 """
+        tenant = self.create_tenants([
+            {"name": "租户_006", "code": "tenant_006", "type": "类型_006"},
+        ])[0]
+        created, modified = tenant.created, tenant.modified
+
+        tenant.name = "租户_006_修改"
+        tenant.save()
+
+        self.assertEqual(tenant.created, created)
+        self.assertTrue(tenant.modified > modified)
+
+    def test_delete_tenant(self):
+        """ 测试删除租户 """
+        tenant = self.create_tenants([
+            {"name": "租户_007", "code": "tenant_007", "type": "类型_007"},
+        ])[0]
+        url = reverse("management:tenant-detail", args=(tenant.id,))
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(
+            self.client.get(url).status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_query_tenant(self):
+        """ 测试查询租户 """
+        tenants = self.create_tenants([
+            {"name": "租户_008", "code": "tenant_008", "type": "类型_008"},
+            {"name": "租户_009", "code": "tenant_009", "type": "类型_009"},
+        ])
+
+        url = "{0}?{1}".format(reverse("management:tenant-list"),
+                               "name=租户_008")
+        response = self.client.get(url)
+        query_result = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(tenants[0].name, query_result[0]["name"])
+
+    def test_query_type_tenant(self):
+        """ 测试查询租户类型 """
+        self.create_tenants([
+            {"name": "租户_010", "code": "tenant_010", "type": "类型_010"},
+            {"name": "租户_011", "code": "tenant_011", "type": "类型_010"},
+        ])
+
+        url = "{0}?{1}".format(reverse("management:tenant-list"),
+                               "type=类型_010")
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(2, len(json.loads(response.content)))
+
+    def test_query_status_tenant(self):
+        """ 测试查询租户状态 """
+        self.create_tenants([
+            {"name": "租户_012", "code": "tenant_012", "type": "类型_012"},
+            {"name": "租户_013", "code": "tenant_013", "type": "类型_013"},
+        ])
+
+        url = "{0}?{1}".format(reverse("management:tenant-list"),
+                               "status={0}".format(settings.STATUS_ENABLE))
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # 默认是启用状态
+        self.assertEqual(2, len(json.loads(response.content)))
+
+    def test_query_created_tenant(self):
+        """ 测试查询租户创建时间 """
+        now = timezone.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.create_tenants([
+            {"name": "租户_014", "code": "tenant_014", "type": "类型_014"},
+            {"name": "租户_015", "code": "tenant_015", "type": "类型_015"},
+        ])
+
+        url = "{0}?{1}".format(reverse("management:tenant-list"),
+                               "created={0} to".format(now))
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(2, len(json.loads(response.content)))
+
+    def test_query_modified_tenant(self):
+        """ 测试查询用户修改时间 """
+        tenants = self.create_tenants([
+            {"name": "租户_016", "code": "tenant_016", "type": "类型_016"},
+            {"name": "租户_017", "code": "tenant_017", "type": "类型_017"},
+        ])
+
+        now = timezone.now()
+        tenants[0].name = "租户_016_修改"
+        tenants[0].save()
+
+        # 查 租户_016
+        url = "{0}?{1}".format(reverse("management:tenant-list"),
+                               "modified={0} to".format(now))
+        response = self.client.get(url)
+        result = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(result))
+        self.assertEqual(tenants[0].name, result[0]["name"])
+
+        # 查 租户_017
+        url = "{0}?{1}".format(reverse("management:tenant-list"),
+                               "modified=to {0}".format(now))
+        response = self.client.get(url)
+        result = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(result))
+        self.assertEqual(tenants[1].name, result[0]["name"])
+
+
+class UserTest(APITestCase):
+
+    def test_list_tenant_relation(self):
+        t = Tenant(
+            name="xinlang07", created=timezone.now())
+        t.save()
+        u = User(tenant=t, name="007_001", owner=12)
+        u.save()
+
+        response = self.client.get(reverse("management:user-list"))
+        self.assertEqual(t.id, json.loads(response.content)[0]["tenant"])
+
+    def test_create_user(self):
+        t = Tenant(name="xinlang08")
+        t.save()
+
+        t2 = Tenant(name="xinlang09")
+        t2.save()
+
+        url = reverse("management:user-list")
+        data = {"name": "wangshuai",
+                "code": "ws",
+                "email": "123@qq.com",
+                "password": 123,
+                "created": "2018-11-12",
+                "modified": "2018-11-13",
+                "owner": 1,
+                "tenant": t2.id,
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED)
+        self.assertEqual(t2.id, json.loads(response.content)["tenant"])

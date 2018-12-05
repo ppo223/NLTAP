@@ -1,0 +1,165 @@
+import sys
+
+from django.test import TestCase
+from users.models import User, Tenant
+from area_of_jobs.models import AreaOfJob
+from keywords.models import KeywordBase, Keyword
+from corpus.models import CorpusBase, Corpus
+from dataset.models import Dataset
+from meta.models import Meta
+from knowledge_graphs.models import KnowledgeGraphBase, KnowledgeGraph
+from labels.models import LabelBase, Label
+from models.models import Model, ModelBase, ModelInstance
+
+def create_instances(instances, class_name):
+    result = []
+    for instance in instances:
+        if class_name == "User":
+            i = User(**instance)
+        elif class_name == "Tenant":
+            i = Tenant(**instance)
+        elif class_name == "AreaOfJob":
+            i = AreaOfJob(**instance)
+        elif class_name == "KeywordBase":
+            i = KeywordBase(**instance)
+        elif class_name == "Keyword":
+            i = Keyword(**instance)
+        elif class_name == "CorpusBase":
+            i = CorpusBase(**instance)
+        elif class_name == "Corpus":
+            i = Corpus(**instance)
+        elif class_name == "Dataset":
+            i = Dataset(**instance)
+        elif class_name == "Meta":
+            i = Meta(**instance)
+        elif class_name == "KnowledgeGraphBase":
+            i = KnowledgeGraphBase(**instance)
+        elif class_name == "KnowledgeGraph":
+            i = KnowledgeGraph(**instance)
+        elif class_name == "LabelBase":
+            i = LabelBase(**instance)
+        elif class_name == "Label":
+            i = Label(**instance)
+        elif class_name == "Model":
+            i = Model(**instance)
+        elif class_name == "ModelBase":
+            i = ModelBase(**instance)
+        elif class_name == "ModelInstance":
+            i = ModelInstance(**instance)
+
+
+        else:
+            raise Exception("Not Match Class Name: [{0}]".format(class_name))
+
+        i.save()
+        result.append(i)
+
+    return result
+
+
+class CreateInstancesTest(TestCase):
+
+    def test_create_instances_for_tenant(self):
+        """ 测试使用通用创建实例方法创建租户 """
+        tenants = create_instances([
+            {"name": "租户_001", "code": "tenant_001", "type": "类型_001"},
+            {"name": "租户_002", "code": "tenant_002", "type": "类型_002"},
+        ], "Tenant")
+
+        self.assertEqual(tenants[0].name, "租户_001")
+        self.assertEqual(tenants[1].name, "租户_002")
+
+    def test_create_instances_for_user(self):
+        """ 测试使用通用创建实例方法创建用户 """
+        tenant = create_instances([
+            {"name": "租户_003", "code": "tenant_003", "type": "类型_003"},
+        ], "Tenant")[0]
+
+        users = create_instances([
+            {
+                "name": "用户_001",
+                "code": "user_001",
+                "email": "user_001@mail.com",
+                "password": "user123",
+                "tenant": tenant
+            },
+            {
+                "name": "用户_002",
+                "code": "user_002",
+                "email": "user_002@mail.com",
+                "password": "user123",
+                "tenant": tenant
+            }
+        ], "User")
+
+        self.assertEqual(users[0].name, "用户_001")
+        self.assertEqual(users[1].name, "用户_002")
+        self.assertEqual(users[1].tenant, tenant)
+        self.assertEqual(users[1].tenant, users[0].tenant)
+
+    def test_create_instances_for_aoj(self):
+        """ 测试使用通用创建实例方法创建机构领域 """
+        tenant = create_instances([
+            {"name": "租户_004", "code": "tenant_004", "type": "类型_004"},
+        ], "Tenant")[0]
+
+        user = create_instances([
+            {
+                "name": "用户_003",
+                "code": "user_003",
+                "email": "user_003@mail.com",
+                "password": "user123",
+                "tenant": tenant
+            },
+        ], "User")[0]
+
+        area_of_jobs = create_instances([
+            {
+                "name": "机构_001",
+                "code": "aoj_001",
+                "owner": user,
+                "tenant": tenant,
+            },
+            {
+                "name": "机构_002",
+                "code": "aoj_002",
+                "owner": user,
+                "tenant": tenant,
+            },
+        ], "AreaOfJob")
+
+        self.assertEqual(area_of_jobs[0].name, "机构_001")
+        self.assertEqual(area_of_jobs[1].name, "机构_002")
+        self.assertEqual(area_of_jobs[1].owner, user)
+        self.assertEqual(area_of_jobs[0].owner, area_of_jobs[1].owner)
+        self.assertEqual(area_of_jobs[1].tenant, tenant)
+        self.assertEqual(area_of_jobs[0].tenant, area_of_jobs[1].tenant)
+
+
+class PythonEnvTest(TestCase):
+
+    def test_python_version(self):
+        """ 测试执行 python 版本 """
+        self.assertTrue(sys.version.startswith("3"))
+
+
+class PythonGrammarTest(TestCase):
+
+    variable_01 = "variable_01_value"
+
+    def test_class_variable(self):
+        """ 测试类变量 """
+        self.assertEqual("variable_01_value", self.variable_01)
+        self.assertTrue(self.variable_01 is not None)
+
+    def test_list_none(self):
+        """ 测试 python 列表为空 """
+        self.assertEqual(0, len([]))
+
+    def test_judge_list_type(self):
+        """ 判断列表类型 """
+        self.assertTrue(isinstance([], list))
+
+    def test_string_is_none(self):
+        """ 测试字符串是否为空 """
+        self.assertTrue(not "   ".strip())

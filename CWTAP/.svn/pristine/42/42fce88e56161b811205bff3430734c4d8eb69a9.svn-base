@@ -1,0 +1,124 @@
+import json
+
+from rest_framework.test import APITestCase
+from rest_framework import status
+from django.urls import reverse
+
+from .models import AreaOfJob
+from cwtap.tests import create_instances
+
+
+class AreaOfJobTest(APITestCase):
+    """ 测试机构领域表 """
+
+    def test_aoj_create(self):
+        """ 测试创建机构领域 """
+        url = reverse("area_of_job:areaofjob-list")
+
+        data = {"name": "机构01", "code": "jigou01"}
+
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("机构01", json.loads(response.content)["name"])
+
+        response = self.client.get(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("jigou01", json.loads(response.content)[0]['code'])
+
+    def test_aoj_delete(self):
+        """ 测试机构领域删除 """
+        aojs = create_instances([
+            {"name": "机构02", "code": "jigou02"},
+            {"name": "机构03", "code": "jigou03"}], "AreaOfJob")
+
+        id_1 = aojs[0].id
+        id_2 = aojs[1].id
+
+        self.assertEqual(2, len(AreaOfJob.objects.all()))
+        self.assertEqual("机构02", AreaOfJob.objects.get(id=id_1).name)
+
+        url = reverse("area_of_job:areaofjob-detail", args=(id_1,))
+
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(1, len(AreaOfJob.objects.all()))
+        self.assertEqual("机构03", AreaOfJob.objects.get(id=id_2).name)
+
+    def test_aoj_update(self):
+        """ 测试修改机构领域 """
+        aojs = create_instances([
+            {"name": "机构_0401", "code": "jigou_0401"},
+            {"name": "机构_0402", "code": "jigou_0402"}], "AreaOfJob")
+
+        id_1 = aojs[0].id
+        id_2 = aojs[1].id
+
+        self.assertEqual(2, len(AreaOfJob.objects.all()))
+        self.assertEqual("机构_0401", AreaOfJob.objects.get(id=id_1).name)
+
+        url = reverse("area_of_job:areaofjob-detail", args=(id_2,))
+
+        data = {"name": "机构_0402修改",
+                "code": "jigou_0402修改"}
+
+        response = self.client.put(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("机构_0402修改", AreaOfJob.objects.get(id=id_2).name)
+        self.assertEqual("机构_0401", AreaOfJob.objects.get(id=id_1).name)
+
+    def test_aoj_query(self):
+        """ 测试查询机构领域 """
+        url = reverse("area_of_job:areaofjob-list")
+
+        data = {"name": "机构05",
+                "code": "jigou05"}
+
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        response = self.client.get(url)
+
+        self.assertEqual("机构05", json.loads(response.content)[0]["name"])
+
+    def test_aoj_user_relations(self):
+        """ 测试机构领域与用户与租户关联关系 """
+        tenant = create_instances([
+            {"name": "租户01",
+             "code": "tenant01",
+             "type": "类型01"}], "Tenant")[0]
+
+        user = create_instances([
+            {"name": "用户01",
+             "code": "user01",
+             "email": "user01@mail.com",
+             "password": "user123",
+             "tenant": tenant}], "User")[0]
+
+        aojs = create_instances([
+            {"name": "机构07",
+             "code": "jigou07",
+             "owner": user,
+             "tenant": tenant},
+
+            {"name": "机构08",
+             "code": "jigou08",
+             "owner": user,
+             "tenant": tenant}], "AreaOfJob")
+
+        # 测试机构领域和租户间的关系
+        self.assertEqual("租户01", tenant.name)
+        self.assertEqual(aojs[0].tenant, aojs[1].tenant)
+        self.assertEqual(aojs[0].tenant.name, tenant.name)
+        # 测试机构领域和用户间的关系
+        self.assertEqual("用户01", user.name)
+        self.assertEqual(aojs[0].owner, aojs[1].owner)
+        self.assertEqual(aojs[0].owner.name, user.name)
+        # 测试机构领域中租户和用户间的关系
+        self.assertEqual("租户01", tenant.name)
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(aojs[1].owner.tenant.name, tenant.name)

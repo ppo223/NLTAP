@@ -1,0 +1,11 @@
+from cwtap.core import viewsets
+from .models import DataSet
+from .serializers import DataSetSerializer
+
+
+class DataSetViewSet(viewsets.CWTAPViewSet):
+    queryset = DataSet.objects.all()
+    serializer_class = DataSetSerializer
+    query_fields = ["uuid", "generate_method", "generate_rules",
+                    "storage_location", "business_data", "created",
+                    "modified", "meta", "owner", "tenant"]

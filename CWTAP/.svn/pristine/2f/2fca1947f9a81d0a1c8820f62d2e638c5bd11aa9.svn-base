@@ -1,0 +1,191 @@
+import json
+import time
+
+from django.urls import reverse
+from rest_framework import status
+
+from cwtap.core.test import CWTAPAPITestCase
+from .models import KnowledgeGraphBase
+
+
+class KnowledgeGraphBaseTest(CWTAPAPITestCase):
+    """ 测试知识图谱库 """
+
+    def setUp(self):
+        super().setUp()
+        self.aoj = self.create_instances([
+            {
+                "name": "机构01",
+                "owner": self.users[0],
+                "tenant": self.tenants[0]
+            }
+        ], "AreaOfJob")[0]
+
+    def test_knowledgebase_create(self):
+        """ 测试知识图谱库创建 """
+        url = reverse("knowledge_graphs:knowledgegraphbase-list")
+        data = {
+            "name": "知识图谱库01",
+            "code": "knowledgebase01",
+            "area_of_job": self.aoj.id
+        }
+        response = self.client.post(url, data, **self.auth_header)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("知识图谱库01", json.loads(response.content)["name"])
+
+        response = self.client.get(url, **self.auth_header)
+        self.assertEqual("知识图谱库01", json.loads(response.content)[0]["name"])
+
+    def test_knowledgebase_delete(self):
+        """ 测试知识图谱库删除 """
+        knowbases = self.create_instances([
+            {
+                "name": "知识图谱库_02",
+                "code": "knowledgebase_02",
+                "area_of_job": self.aoj
+            },
+            {
+                "name": "知识图谱库_03",
+                "code": "knowledgebase_03",
+                "area_of_job": self.aoj
+            }
+        ], "KnowledgeGraphBase")
+
+        self.assertEqual("知识图谱库_02",
+                         KnowledgeGraphBase.objects.get(
+                             id=knowbases[0].id).name)
+        self.assertEqual(2, len(KnowledgeGraphBase.objects.all()))
+
+        url = reverse("knowledge_graphs:knowledgegraphbase-detail",
+                      args=(knowbases[0].id,))
+        response = self.client.delete(url, **self.auth_header)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(1, len(KnowledgeGraphBase.objects.all()))
+        self.assertEqual("知识图谱库_03",
+                         KnowledgeGraphBase.objects.get(
+                             id=knowbases[1].id).name)
+
+    def test_knowledgebase_update(self):
+        """ 测试知识图谱库修改 """
+        knowbases = self.create_instances([
+            {
+                "name": "知识图谱库_0401",
+                "code": "knowledgebase_0401",
+                "area_of_job": self.aoj
+            },
+            {
+                "name": "知识图谱库_0402",
+                "code": "knowledgebase_0402",
+                "area_of_job": self.aoj
+            }
+        ], "KnowledgeGraphBase")
+
+        self.assertEqual(2, len(KnowledgeGraphBase.objects.all()))
+        self.assertEqual("知识图谱库_0401", knowbases[0].name)
+
+        url = reverse("knowledge_graphs:knowledgegraphbase-detail",
+                      args=(knowbases[0].id,))
+        data = {
+            "name": "知识图谱库_0401修改",
+            "code": "knowledgebase_0401修改",
+            "area_of_job": self.aoj.id
+        }
+        response = self.client.put(url, data, **self.auth_header)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("知识图谱库_0401修改",
+                         KnowledgeGraphBase.objects.get(
+                             id=knowbases[0].id).name)
+        self.assertEqual("知识图谱库_0402",
+                         KnowledgeGraphBase.objects.get(
+                             id=knowbases[1].id).name)
+
+    def test_knowledgebase_timeupdate(self):
+        """ 测试知识图谱库的时间修改 """
+        knowbases = self.create_instances([
+            {
+                "name": "知识图谱库_00",
+                "code": "knowledgebase_00",
+                "area_of_job": self.aoj
+            }
+        ], "KnowledgeGraphBase")[0]
+
+        created, modified = knowbases.created, knowbases.modified
+
+        time.sleep(1)
+        knowbases.name = "知识图谱库_00_修改"
+        knowbases.save()
+
+        self.assertEqual(knowbases.created, created)
+        self.assertTrue(knowbases.modified > modified)
+
+    def test_knowledgebase_query(self):
+        """ 测试知识图谱库查询 """
+        knows = self.create_instances([
+            {
+                "name": "知识图谱库_0501",
+                "code": "knowledgebase_0501",
+                "area_of_job": self.aoj
+            },
+            {
+                "name": "知识图谱库_0502",
+                "code": "knowledgebase_0502",
+                "area_of_job": self.aoj
+            }
+        ], "KnowledgeGraphBase")
+
+        url_path = "knowledge_graphs:knowledgegraphbase-list"
+        url = "{0}?{1}".format(reverse(url_path), "name=知识图谱库_0501")
+
+        response = self.client.get(url, **self.auth_header)
+        query_result = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(knows[0].name, query_result[0]["name"])
+
+        url = "{0}?{1}".format(reverse(url_path), "name=知识图谱库_0502")
+
+        response = self.client.get(url, **self.auth_header)
+        query_result = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(knows[1].name, query_result[0]["name"])
+
+    def test_know_aoj_user_relations(self):
+        """ 测试知识图谱库与机构领域与用户与租户关联关系 """
+        knowbases = self.create_instances([
+            {
+                "name": "知识图谱库06",
+                "code": "knowledgebase06",
+                "owner": self.users[0],
+                "tenant": self.tenants[0],
+                "area_of_job": self.aoj
+            },
+            {
+                "name": "知识图谱库07",
+                "code": "knowledgebase07",
+                "owner": self.users[0],
+                "tenant": self.tenants[0],
+                "area_of_job": self.aoj
+            }
+        ], "KnowledgeGraphBase")
+
+        # 测试知识图谱库和租户间的关系
+        self.assertTrue(not None, knowbases[1].tenant.name)
+        self.assertEqual(knowbases[0].tenant, knowbases[1].tenant)
+        self.assertEqual(knowbases[0].tenant.name, self.tenants[0].name)
+        # 测试知识图谱库和用户间的关系
+        self.assertTrue(not None, self.users[0].username)
+        self.assertEqual(knowbases[0].owner, knowbases[1].owner)
+        self.assertEqual(knowbases[0].owner.username, self.users[0].username)
+        # 测试知识图谱库和机构领域的关系
+        self.assertEqual("机构01", self.aoj.name)
+        self.assertEqual(knowbases[0].area_of_job, knowbases[1].area_of_job)
+        self.assertEqual(knowbases[0].area_of_job.name, self.aoj.name)
+        # 测试知识图谱库中租户和用户间的关系
+        self.assertEqual(self.tenants[0].name,
+                         self.users[0].userprofile.tenant.name)
+        self.assertEqual(knowbases[1].owner.userprofile.tenant.name,
+                         self.tenants[0].name)

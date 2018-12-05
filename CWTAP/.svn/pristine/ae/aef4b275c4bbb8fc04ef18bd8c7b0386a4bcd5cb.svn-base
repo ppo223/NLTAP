@@ -1,0 +1,10 @@
+from cwtap.core import viewsets
+from .models import Model
+from .serializers import ModelSerializer
+
+
+class ModelViewSet(viewsets.CWTAPViewSet):
+    queryset = Model.objects.all()
+    serializer_class = ModelSerializer
+    query_fields = ["name", "code", "details", "status", "created",
+                    "modified", "modelbase", "owner", "tenant"]

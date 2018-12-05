@@ -1,0 +1,145 @@
+import json
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from .models import Meta
+from cwtap.tests import create_instances
+
+
+tenant = create_instances([{"name": "租户01", "code": "tenant01"}], "Tenant")[0]
+
+user = create_instances([{"name": "用户01", "tenant": tenant}], "User")[0]
+
+aoj = create_instances([
+    {"name": "机构01", "owner": user, "tenant": tenant}], "AreaOfJob")[0]
+
+corpusbase = create_instances([
+    {"name": "语料库01",
+     "owner": user,
+     "tenant": tenant,
+     "area_of_job": aoj}], "CorpusBase")[0]
+
+
+class MetaTest(APITestCase):
+    """ 测试元数据表 """
+
+    def test_meta_create(self):
+        """ 测试元数据创建 """
+        url = reverse("meta:meta-list")
+        data = {"code": "meta01"}
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(["This field is required."],
+                         json.loads(response.content)["name"])
+
+        data = {"name": "元数据01", "code": "meta01"}
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("元数据01", json.loads(response.content)["name"])
+
+        response = self.client.get(url)
+        self.assertEqual("元数据01", json.loads(response.content)[0]["name"])
+
+    def test_meta_delete(self):
+        """ 测试元数据删除 """
+        metas = create_instances([
+            {"name": "元数据02", "code": "meta02"},
+            {"name": "元数据03", "code": "meta03"}], "Meta")
+
+        self.assertEqual("元数据02", metas[0].name)
+        self.assertEqual(2, len(Meta.objects.all()))
+
+        id_1 = metas[0].id
+        id_2 = metas[1].id
+
+        url = reverse("meta:meta-detail", args=(id_1,))
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(1, len(Meta.objects.all()))
+        self.assertEqual("元数据03", Meta.objects.get(id=id_2).name)
+
+    def test_meta_update(self):
+        """ 测试元数据修改 """
+        metas = create_instances([
+            {"name": "元数据_0401", "code": "meta_0401"},
+            {"name": "元数据_0402", "code": "meta_0402"}], "Meta")
+
+        self.assertEqual("元数据_0401", metas[0].name)
+        self.assertEqual(2, len(Meta.objects.all()))
+
+        id_1 = metas[0].id
+        id_2 = metas[1].id
+
+        url = reverse("meta:meta-detail", args=(id_2,))
+        
+        data = {"name": "元数据_0402_修改",
+                "code": "meta_0402_修改"}
+        
+        response = self.client.put(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("元数据_0401", Meta.objects.get(id=id_1).name)
+
+        url = reverse("meta:meta-list")
+
+        response = self.client.get(url)
+
+        self.assertEqual("元数据_0402_修改",
+                         json.loads(response.content)[1]["name"])
+        self.assertEqual("元数据_0401",
+                         json.loads(response.content)[0]["name"])
+
+    def test__meta_query(self):
+        """ 测试元数据查询 """
+        meta = create_instances([
+            {"name": "元数据05", "code": "meta05"}], "Meta")
+        
+        url = "{0}?{1}".format(reverse("meta:meta-list"),
+                               "name=元数据05")
+
+        response = self.client.get(url)
+
+        query_result = json.loads(response.content)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(meta[0].name, query_result[0]["name"])
+
+    def test_meta_corpus_user_relations(self):
+        """ 测试元数据与语料库与用户与租户关联关系 """
+        metas = create_instances([
+            {"name": "元数据06",
+             "code": "meta06",
+             "owner": user,
+             "tenant": tenant,
+             "corpusbase": corpusbase},
+            
+            {"name": "元数据07",
+             "code": "meta07",
+             "owner": user,
+             "tenant": tenant,
+             "corpusbase": corpusbase}], "Meta")
+
+        # 测试元数据和租户间的关系
+        self.assertEqual(metas[0].tenant, metas[1].tenant)
+        self.assertEqual(metas[0].tenant.name, tenant.name)
+        # 测试元数据和用户间的关系
+        self.assertEqual(metas[0].owner, metas[1].owner)
+        self.assertEqual(metas[0].owner.name, user.name)
+        # 测试元数据和语料库间的关系
+        self.assertEqual(metas[0].corpusbase, metas[1].corpusbase)
+        self.assertEqual(metas[0].corpusbase.name, corpusbase.name)
+        # 测试元数据中租户和用户间的关系
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(metas[1].owner.tenant.name, tenant.name)
+        self.assertEqual(metas[1].owner.tenant.name, user.tenant.name)
+        # 测试元数据和机构领域间的关系
+        self.assertEqual("机构01", metas[0].corpusbase.area_of_job.name)
+        self.assertEqual(metas[0].corpusbase.area_of_job,
+                         corpusbase.area_of_job)
+        self.assertEqual(metas[0].corpusbase.area_of_job,
+                         metas[1].corpusbase.area_of_job)

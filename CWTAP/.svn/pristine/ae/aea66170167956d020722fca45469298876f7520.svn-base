@@ -1,0 +1,193 @@
+import json
+import time
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from .models import Dataset
+from cwtap.tests import create_instances
+
+
+tenant = create_instances([{"name": "租户01", "code": "tenant01"}], "Tenant")[0]
+user = create_instances([{"name": "用户01", "tenant": tenant}], "User")[0]
+meta = create_instances([{"name": "元数据01", "owner": user, "tenant": tenant}], "Meta")[0]
+
+
+class DatasetTest(APITestCase):
+    """ 测试数据集表 """
+
+    def test_dataset_create(self):
+        """测试创建数据集"""
+        url = reverse("dataset:dataset-list")
+        data = {"uuid": "数据集00",
+                "generate_method": "method00",
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(["This field is required."],
+                         json.loads(response.content)["generate_rules"])
+
+        data = {"uuid": "数据集01",
+                "generate_method": "method01",
+                "generate_rules": "rule01",
+                "storage_location": "storage01",
+                "business_date": "data01",
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("数据集01", json.loads(response.content)["uuid"])
+        response = self.client.get(url)
+        self.assertEqual("数据集01", json.loads(response.content)[0]["uuid"])
+
+    def test_dataset_delete(self):
+        """测试删除数据集"""
+        url = reverse("dataset:dataset-list")
+        data = {"uuid": "数据集02",
+                "generate_method": "method02",
+                "generate_rules": "rule02",
+                "storage_location": "storage02",
+                "business_date": "data02", }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("数据集02", json.loads(response.content)["uuid"])
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        url = reverse("dataset:dataset-list")
+        data = {"uuid": "数据集03",
+                "generate_method": "method03",
+                "generate_rules": "rule03",
+                "storage_location": "storage03",
+                "business_date": "data03", }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(2, len(Dataset.objects.all()))
+
+        _dataset = json.loads(response.content)
+        url = reverse("dataset:dataset-detail",
+                      args=(_dataset[0]["id"],))
+        response = self.client.delete(url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(1, len(Dataset.objects.all()))
+        self.assertEqual(json.loads(self.client.get(url).content)["detail"],
+                         "Not found.")
+
+    def test_datasets_update(self):
+        """测试修改数据集"""
+        url = reverse("dataset:dataset-list")
+        data = {"uuid": "数据集_0401",
+                "generate_method": "method_0401",
+                "generate_rules": "rule_0401",
+                "storage_location": "storage_0401",
+                "business_date": "data_0401", }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("数据集_0401", json.loads(response.content)["uuid"])
+
+        data = {"uuid": "数据集_0402",
+                "generate_method": "method_0402",
+                "generate_rules": "rule_0402",
+                "storage_location": "storage_0402",
+                "business_date": "data_0402", }
+        response = self.client.post(url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("数据集_0402", json.loads(response.content)["uuid"])
+        self.assertEqual(
+            2, len(json.loads(self.client.get(url).content)))  # 顺便测试列表长度
+
+        pk = json.loads(response.content)["id"]
+        url = reverse("dataset:dataset-detail", args=(pk,))
+        data = {"uuid": "数据集_0402修改",
+                "generate_method": "method_0402修改",
+                "generate_rules": "rule_0402修改",
+                "storage_location": "storage_0402修改",
+                "business_date": "data_0402修改", }
+        response = self.client.put(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        url = reverse("dataset:dataset-list")
+        response = self.client.get(url)
+        id_1 = json.loads(response.content)[0]["id"]
+        id_2 = json.loads(response.content)[1]["id"]
+
+        self.assertEqual("数据集_0401", Dataset.objects.get(id=id_1).uuid)
+        self.assertEqual("数据集_0402修改", Dataset.objects.get(id=id_2).uuid)
+
+    def test_datasets_timeupdate(self):
+        """测试数据集时间修改"""
+        datasets = create_instances([{
+            "uuid": "数据集_00",
+            "generate_method": "method_00",
+            "generate_rules": "rule_00",
+            "storage_location": "storage_00",
+            "business_date": "data_00",
+        }], "Dataset")[0]
+        created, modified = datasets.created, datasets.modified
+        time.sleep(1)
+        datasets.uuid = "数据集_00_修改"
+        datasets.save()
+
+        self.assertEqual(datasets.created, created)
+        self.assertTrue(datasets.modified > modified)
+
+    def test_datasets_query(self):
+        """ 测试查询数据集 """
+        datasets = create_instances([{
+            "uuid": "数据集05",
+            "generate_method": "method05",
+            "generate_rules": "rule05",
+            "storage_location": "storage05",
+            "business_date": "data05",
+        }], "Dataset")
+
+        url = "{0}?{1}".format(reverse("dataset:dataset-list"), "name=数据集05")
+        response = self.client.get(url)
+        query_result = json.loads(response.content)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(datasets[0].uuid, query_result[0]["uuid"])
+
+    def test_dataset_meta_user_relations(self):
+        """测试数据集与用户与租户与元数据关联关系"""
+        datasets = create_instances([
+            {
+                "uuid": "数据集06",
+                "generate_method": "method06",
+                "generate_rules": "rule06",
+                "storage_location": "storage06",
+                "business_date": "data06",
+                "owner": user,
+                "tenant": tenant,
+                "meta": meta,
+            },
+            {
+                "uuid": "数据集07",
+                "generate_method": "method07",
+                "generate_rules": "rule07",
+                "storage_location": "storage07",
+                "business_date": "data07",
+                "owner": user,
+                "tenant": tenant,
+                "meta": meta,
+            }
+        ], "Dataset")
+
+        """测试数据集和租户间的关系"""
+        self.assertEqual("租户01", tenant.name)
+        self.assertEqual(datasets[0].tenant, datasets[1].tenant)
+        self.assertEqual(datasets[0].tenant.name, tenant.name)
+        """测试数据集和用户间的关系"""
+        self.assertEqual("用户01", user.name)
+        self.assertEqual(datasets[0].owner, datasets[1].owner)
+        self.assertEqual(datasets[0].owner.name, user.name)
+        """测试数据集和元数据间的关系"""
+        self.assertEqual("元数据01", meta.name)
+        self.assertEqual(datasets[0].meta, datasets[1].meta)
+        self.assertEqual(datasets[0].meta.name, meta.name)
+        """测试数据集中租户和用户间的关系"""
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(datasets[1].owner.tenant.name, tenant.name)

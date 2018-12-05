@@ -1,0 +1,47 @@
+from django.db import models
+from django.conf import settings
+
+from users.models import User, Tenant
+from dataset.models import Dataset
+from models.models import ModelInstance
+
+
+class ModelTask(models.Model):
+    """ 模型任务表 """
+    name = models.CharField("模型任务名称", max_length=255)
+    type = models.CharField("模型任务类型", max_length=255)
+    schedule_rule = models.CharField("模型任务规则", max_length=255)
+    dataset_generate_method = models.CharField("任务数据集生成方法", max_length=255)
+    dataset_generate_rule = models.CharField("任务数据集生成规则", max_length=255)
+    status = models.IntegerField(
+        "模型任务状态",
+        choices=settings.STATUS_CHOICES,
+        default=settings.STATUS_ENABLE)
+    details = models.TextField("模型任务详情", default="")
+    created = models.DateTimeField("模型任务创建时间", auto_now_add=True)
+    modified = models.DateTimeField("模型任务修改时间", auto_now=True)
+    model_instance = models.ForeignKey(
+        ModelInstance, on_delete=models.CASCADE, blank=True, null=True)
+    owner = models.ForeignKey(
+        User, on_delete=models.CASCADE, blank=True, null=True)
+    tenant = models.ForeignKey(
+        Tenant, on_delete=models.CASCADE, blank=True, null=True)
+
+
+class ModelTaskExecution(models.Model):
+    """ 模型任务执行表 """
+    status = models.IntegerField(
+        "模型任务执行状态",
+        choices=settings.STATUS_CHOICES,
+        default=settings.STATUS_ENABLE)
+    result = models.CharField("模型任务执行结果", max_length=255)
+    started = models.DateTimeField("模型任务执行开始时间", auto_now_add=True)
+    ended = models.DateTimeField("模型任务执行结束修改结束时间", auto_now=True)
+    created = models.DateTimeField("模型任务执行创建时间", auto_now_add=True)
+    modified = models.DateTimeField("模型任务执行修改时间", auto_now=True)
+    train_task = models.ForeignKey(
+        ModelTask, on_delete=models.CASCADE, blank=True, null=True)
+    dataset = models.ForeignKey(
+        Dataset, on_delete=models.CASCADE, blank=True, null=True)
+    tenant = models.ForeignKey(
+        Tenant, on_delete=models.CASCADE, blank=True, null=True)

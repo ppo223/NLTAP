@@ -1,0 +1,36 @@
+[
+    {
+        "model": "keywords.keywordbase", 
+        "fields": {
+            "name": "通用关键词库", 
+            "code": "common_business", 
+            "type": 1, 
+            "is_common": true, 
+            "details": "通用关键词库", 
+            "status": 1, 
+            "created": "2018-12-04T15:44:16.715591",
+            "modified": "2018-12-04T15:44:16.715591",
+            "storage_location": "",
+            "area_of_job": null, 
+            "owner": null, 
+            "tenant": null
+        }
+    },
+    {
+        "model": "keywords.keywordbase", 
+        "fields": {
+            "name": "通用停用词库", 
+            "code": "common_stop", 
+            "type": 2, 
+            "is_common": true, 
+            "details": "通用停用词库", 
+            "status": 1, 
+            "created": "2018-12-04T15:44:16.715591",
+            "modified": "2018-12-04T15:44:16.715591",
+            "storage_location": "",
+            "area_of_job": null, 
+            "owner": null, 
+            "tenant": null
+        }
+    }
+]

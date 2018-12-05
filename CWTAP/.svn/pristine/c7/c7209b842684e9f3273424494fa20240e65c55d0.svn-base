@@ -1,0 +1,228 @@
+import json, time
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from users.models import Tenant, User
+from area_of_jobs.models import AreaOfJob
+from .models import LabelBase
+
+
+class LabelBaseTest(APITestCase):
+
+    def create_tenants(self, tenants):
+        result = []
+        for tenant in tenants:
+            t = Tenant(**tenant)
+            t.save()
+            result.append(t)
+
+        return result
+
+    def create_users(self, users):
+        result = []
+        for user in users:
+            u = User(**user)
+            u.save()
+            result.append(u)
+
+        return result
+
+    def create_aojs(self, aojs):
+        result = []
+        for aoj in aojs:
+            a = AreaOfJob(**aoj)
+            a.save()
+            result.append(a)
+
+        return result
+
+    def create_labels(self, labels):
+        result = []
+        for lab in labels:
+            l = LabelBase(**lab)
+            l.save()
+            result.append(l)
+
+        return result
+
+
+    def test_labels_create(self):
+        """测试创建标签库"""
+        url = reverse("labels:labelbase-list")
+        data = {"name": "标签库00",
+                "code": "label00",
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(["This field is required."], json.loads(response.content)["type"])
+        data = {"name": "标签库01",
+                "code": "label01",
+                "type": "类型01",
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("标签库01", json.loads(response.content)["name"])
+        response = self.client.get(url)
+        self.assertEqual("标签库01", json.loads(response.content)[0]["name"])
+
+    def test_labels_delete(self):
+        """测试删除标签库"""
+        url = reverse("labels:labelbase-list")
+        data = {
+            "name": "标签库02",
+            "code": "label02",
+            "details": "你好，标签库02",
+            "type": "类型02",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("标签库02", json.loads(response.content)["name"])
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        url = reverse("labels:labelbase-list")
+        data = {
+            "name": "标签库03",
+            "code": "label03",
+            "details": "你好，标签库03",
+            "type": "类型03",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertEqual(2, len(LabelBase.objects.all()))
+        LabelBase.objects.filter(id=1).delete()
+        self.assertEqual(1, len(LabelBase.objects.all()))
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("标签库03", json.loads(response.content)[0]['name'])
+
+        data = {"name": "标签库02"}
+        self.assertEqual(json.loads(self.client.get(url, data).content), [])
+
+    def test_labels_update(self):
+        """测试修改标签库"""
+        url = reverse("labels:labelbase-list")
+        data = {
+            "name": "标签库_0401",
+            "code": "label_0401",
+            "details": "你好，标签库_0401",
+            "type": "类型_0401",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("标签库_0401", json.loads(response.content)["name"])
+
+        data = {
+            "name": "标签库_0402",
+            "code": "label_0402",
+            "details": "你好，标签库_0402",
+            "type": "类型_0402",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("标签库_0402", json.loads(response.content)["name"])
+        self.assertEqual(2, len(json.loads(self.client.get(url).content)))  #顺便测试列表长度
+
+        pk = json.loads(response.content)["id"]
+        url = reverse("labels:labelbase-detail", args=(pk,))
+        data = {
+            "name": "标签库_0402修改",
+            "code": "label_0402修改",
+            "details": "你好，标签库_0402修改",
+            "type": "类型_0402",
+        }
+        response = self.client.put(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("标签库_0401", LabelBase.objects.get(id=1).name)
+        self.assertEqual("标签库_0402修改", LabelBase.objects.get(id=2).name)
+
+    def test_labels_timeupdate(self):
+        """测试标签库时间修改"""
+        labels = self.create_labels([
+            {"name": "标签库_00", "code": "label_00", "type": "类型_00"},
+        ])[0]
+        created, modified = labels.created, labels.modified
+        time.sleep(1)
+        labels.name = "标签库_00_修改"
+        labels.save()
+
+        self.assertEqual(labels.created, created)
+        self.assertTrue(labels.modified > modified)
+
+    def test_labels_query(self):
+        """ 测试查询标签库 """
+        labels = self.create_labels([
+            {"name": "标签库05", "code": "label05", "type": "类型05"},])
+        url = "{0}?{1}".format(reverse("labels:labelbase-list"),
+                               "name=标签库05")
+        response = self.client.get(url)
+        query_result = json.loads(response.content)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(labels[0].name, query_result[0]["name"])
+
+    def test_label_aoj_user_relations(self):
+        """测试标签库与用户与租户与机构领域关联关系"""
+        tenant = self.create_tenants([
+            {"name": "租户01",
+             "code": "tenant01",
+             "type": "类型01"},
+        ])[0]
+
+        user = self.create_users([
+            {
+                "name": "用户01",
+                "code": "user01",
+                "email": "user01@mail.com",
+                "password": "user123",
+                "tenant": tenant
+            },
+        ])[0]
+
+        aoj = self.create_aojs([
+            {
+                "name": "机构01",
+                "code": "jigou01",
+                "owner": user,
+                "tenant": tenant,
+            }
+        ])[0]
+
+        labels = self.create_labels([
+            {
+                "name": "标签库06",
+                "code": "label06",
+                "type": "类型06",
+                "owner": user,
+                "tenant": tenant,
+                "area_of_job": aoj,
+            },
+            {
+                "name": "标签库07",
+                "code": "label07",
+                "type": "类型07",
+                "owner": user,
+                "tenant": tenant,
+                "area_of_job": aoj,
+            }
+        ])
+        """测试标签库和租户间的关系"""
+        self.assertEqual(labels[0].tenant, labels[1].tenant)
+        self.assertEqual(labels[0].tenant.name, tenant.name)
+        self.assertEqual(labels[1].tenant.name, tenant.name)
+        """测试标签库和用户间的关系"""
+        self.assertEqual(labels[0].owner, labels[1].owner)
+        self.assertEqual(labels[0].owner.name, user.name)
+        self.assertEqual(labels[1].owner.name, user.name)
+        """测试标签库和机构领域的关系"""
+        self.assertEqual(labels[0].area_of_job, labels[1].area_of_job)
+        self.assertEqual(labels[0].area_of_job.name, aoj.name)
+        self.assertEqual(labels[1].area_of_job.name, aoj.name)
+        """测试标签库中租户和用户间的关系"""
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(labels[1].owner.tenant.name, tenant.name)
+        self.assertEqual(labels[1].owner.tenant.name, user.tenant.name)

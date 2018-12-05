@@ -1,0 +1,462 @@
+import json
+import time
+import datetime
+
+from django.urls import reverse
+from rest_framework import status
+
+from cwtap.core.test import CWTAPAPITestCase
+from .models import ModelTask, ModelTaskExecution
+
+
+class ModelTaskTest(CWTAPAPITestCase):
+    """ 测试模型任务表 """
+
+    def setUp(self):
+        super().setUp()
+        self.user = self.users[0]
+        self.tenant = self.tenants[0]
+        self.aoj = self.create_instances([
+            {
+                "name": "机构01",
+                "owner": self.user,
+                "tenant": self.tenant
+            }
+        ], "AreaOfJob")[0]
+
+        self.modelbase = self.create_instances([
+            {
+                "name": "模型库01",
+                "owner": self.user,
+                "tenant": self.tenant,
+                "area_of_job": self.aoj
+            }
+        ], "ModelBase")[0]
+
+        self.model = self.create_instances([
+            {
+                "name": "模型01",
+                "owner": self.user,
+                "tenant": self.tenant,
+                "modelbase": self.modelbase
+            }
+        ], "Model")[0]
+
+        self.model_instance = self.create_instances([
+            {
+                "name": "实例01",
+                "model": self.model,
+                "owner": self.user,
+                "tenant": self.tenant
+            }
+        ], "ModelInstance")[0]
+
+    def test_modeltask_create(self):
+        """ 测试模型任务创建 """
+        url = reverse("tasks:modeltask-list")
+        data = {"type": "类型00"}
+        response = self.client.post(url, data, **self.auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_400_BAD_REQUEST,
+                         response.content)
+        self.assertEqual(["This field is required."],
+                         json.loads(response.content)["name"])
+
+        data = {
+            "name": "任务01",
+            "type": "类型01",
+            "schedule_rule": "规则01",
+            "dataset_generate_method": "生成方法01",
+            "dataset_generate_rule": "生成规则01",
+            "model_instance": self.model_instance.id
+        }
+        response = self.client.post(url, data, **self.auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertEqual(data["name"], json.loads(response.content)["name"])
+
+        response = self.client.get(url, **self.auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+        self.assertEqual(data["name"], json.loads(response.content)[0]["name"])
+
+    def test_modeltask_delete(self):
+        """ 测试模型任务删除 """
+        model_tasks = self.create_instances([
+            {
+                "name": "任务02",
+                "type": "类型02",
+                "schedule_rule": "规则02",
+                "dataset_generate_method": "生成方法02",
+                "dataset_generate_rule": "生成规则02",
+                "model_instance": self.model_instance
+            },
+            {
+                "name": "任务03",
+                "type": "类型03",
+                "schedule_rule": "规则03",
+                "dataset_generate_method": "生成方法03",
+                "dataset_generate_rule": "生成规则03",
+                "model_instance": self.model_instance
+            }
+        ], "ModelTask")
+        url = reverse("tasks:modeltask-detail", args=(model_tasks[0].id,))
+        response = self.client.delete(url, **self.auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_204_NO_CONTENT,
+                         response.content)
+        self.assertEqual(1, len(ModelTask.objects.all()))
+
+    def test_modeltask_update(self):
+        """ 测试模型任务修改 """
+        model_tasks = self.create_instances([
+            {
+                "name": "任务_0401",
+                "type": "类型_0401",
+                "schedule_rule": "规则_0401",
+                "dataset_generate_method": "生成方法_0401",
+                "dataset_generate_rule": "生成规则_0401",
+                "model_instance": self.model_instance
+            },
+            {
+                "name": "任务_0402",
+                "type": "类型_0402",
+                "schedule_rule": "规则_0402",
+                "dataset_generate_method": "生成方法_0402",
+                "dataset_generate_rule": "生成规则_0402",
+                "model_instance": self.model_instance
+            }
+        ], "ModelTask")
+        url = reverse("tasks:modeltask-detail", args=(model_tasks[1].id,))
+        data = {
+            "name": "任务_0402修改",
+            "type": "类型_0402修改",
+            "schedule_rule": "规则_0402修改",
+            "dataset_generate_method": "生成方法_0402修改",
+            "dataset_generate_rule": "生成规则_0402修改",
+            "model_instance": self.model_instance.id
+        }
+        response = self.client.put(url, data, **self.auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+        self.assertEqual(model_tasks[0].name,
+                         ModelTask.objects.get(id=model_tasks[0].id).name)
+        self.assertEqual(data["name"],
+                         ModelTask.objects.get(id=model_tasks[1].id).name)
+
+    def test_modeltask_timeupdate(self):
+        """ 测试模型任务时间修改 """
+        model_task = self.create_instances([
+            {
+                "name": "任务05",
+                "type": "类型05",
+                "schedule_rule": "规则05",
+                "dataset_generate_method": "生成方法05",
+                "dataset_generate_rule": "生成规则05",
+                "model_instance": self.model_instance
+            }
+        ], "ModelTask")[0]
+        created, modified = model_task.created, model_task.modified
+        time.sleep(1)
+        model_task.name = "任务05_修改"
+        model_task.save()
+
+        self.assertEqual(model_task.created, created)
+        self.assertTrue(model_task.modified > modified)
+
+    def test_modeltask_query(self):
+        """ 测试模型任务查询 """
+        model_task = self.create_instances([
+            {
+                "name": "任务0601",
+                "type": "类型0601",
+                "schedule_rule": "规则0601",
+                "dataset_generate_method": "生成方法0601",
+                "dataset_generate_rule": "生成规则0601",
+                "model_instance": self.model_instance
+            },
+            {
+                "name": "任务0602",
+                "type": "类型0602",
+                "schedule_rule": "规则0602",
+                "dataset_generate_method": "生成方法0602",
+                "dataset_generate_rule": "生成规则0602",
+                "model_instance": self.model_instance
+            }
+        ], "ModelTask")[0]
+        url = "{0}?{1}".format(reverse("tasks:modeltask-list"),
+                               "name={0}".format(model_task.name))
+        response = self.client.get(url, **self.auth_header)
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+        self.assertEqual(1, len(response_data))
+        self.assertEqual(model_task.name, response_data[0]["name"])
+
+    def test_modeltask_modelinstance_user_relations(self):
+        """ 测试模型任务与模型实例与用户与租户间关系 """
+        model_task = self.create_instances([
+            {
+                "name": "任务07",
+                "type": "类型07",
+                "schedule_rule": "规则07",
+                "dataset_generate_method": "生成方法07",
+                "dataset_generate_rule": "生成规则07",
+                "owner": self.user,
+                "tenant": self.tenant,
+                "model_instance": self.model_instance
+            },
+            {
+                "name": "任务08",
+                "type": "类型08",
+                "schedule_rule": "规则08",
+                "dataset_generate_method": "生成方法08",
+                "dataset_generate_rule": "生成规则08",
+                "owner": self.user,
+                "tenant": self.tenant,
+                "model_instance": self.model_instance
+            }
+        ], "ModelTask")
+
+        # 测试模型任务和租户间的关系
+        self.assertEqual(model_task[0].tenant, model_task[1].tenant)
+        self.assertEqual(model_task[0].tenant.name, self.tenant.name)
+        # 测试模型任务和用户间的关系
+        self.assertEqual(model_task[0].owner, model_task[1].owner)
+        self.assertEqual(model_task[0].owner.username, self.user.username)
+        # 测试模型任务和模型实例的关系
+        self.assertEqual(model_task[0].model_instance,
+                         model_task[1].model_instance)
+        self.assertEqual(model_task[0].model_instance.name,
+                         self.model_instance.name)
+        # 测试模型任务中租户和用户间的关系
+        self.assertEqual(self.tenant.name, self.user.userprofile.tenant.name)
+        self.assertEqual(model_task[1].owner.userprofile.tenant.name,
+                         self.tenant.name)
+
+
+class ModelTaskExecutionTest(CWTAPAPITestCase):
+    """ 测试模型任务执行表 """
+
+    def setUp(self):
+        super().setUp()
+        self.user = self.users[0]
+        self.tenant = self.tenants[0]
+        self.aoj = self.create_instances([
+            {
+                "name": "机构",
+                "owner": self.user,
+                "tenant": self.tenant
+            }
+        ], "AreaOfJob")[0]
+
+        self.modelbase = self.create_instances([
+            {
+                "name": "模型库",
+                "owner": self.user,
+                "tenant": self.tenant,
+                "area_of_job": self.aoj
+            }
+        ], "ModelBase")[0]
+
+        self.model = self.create_instances([
+            {
+                "name": "模型",
+                "owner": self.user,
+                "tenant": self.tenant,
+                "modelbase": self.modelbase
+            }
+        ], "Model")[0]
+
+        self.model_instance = self.create_instances([
+            {
+                "name": "实例",
+                "model": self.model,
+                "owner": self.user,
+                "tenant": self.tenant
+            }
+        ], "ModelInstance")[0]
+
+        self.model_task = self.create_instances([
+            {
+                "name": "任务",
+                "owner": self.user,
+                "tenant": self.tenant,
+                "model_instance": self.model_instance
+            }
+        ], "ModelTask")[0]
+
+        self.corpusbase = self.create_instances([
+            {
+                "name": "语料库",
+                "code": "corpusbase",
+            }
+        ], "Corpusbase")[0]
+
+        self.meta = self.create_instances([
+            {
+                "name": "元数据",
+                "code": "meta",
+                "corpusbase": self.corpusbase
+            }
+        ], "Meta")[0]
+
+        self.dataset = self.create_instances([
+            {
+                "uuid": "数据集",
+                "meta": self.meta
+            }
+        ], "Dataset")[0]
+
+    def test_model_task_execution_create(self):
+        """ 测试模型任务执行创建 """
+        url = reverse("tasks:modeltaskexecution-list")
+        response = self.client.post(url, {}, **self.auth_header)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(["This field is required."],
+                         json.loads(response.content)["dataset"])
+
+        data = {
+            "result": "结果01",
+            "started": datetime.datetime.now(),
+            "ended": datetime.datetime.now(),
+            "train_task": self.model_task.id,
+            "dataset": self.dataset.id
+        }
+        response = self.client.post(url, data, **self.auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_201_CREATED,
+                         response.content)
+        self.assertEqual(data["result"],
+                         json.loads(response.content)["result"])
+
+        response = self.client.get(url, **self.auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+        self.assertEqual(data["result"],
+                         json.loads(response.content)[0]["result"])
+
+    def test_model_task_execution_delete(self):
+        """ 测试模型任务执行删除 """
+        model_task_executions = self.create_instances([
+            {
+                "result": "结果02",
+                "started": datetime.datetime.now(),
+                "ended": datetime.datetime.now(),
+                "train_task": self.model_task,
+                "dataset": self.dataset
+            },
+            {
+                "result": "结果03",
+                "started": datetime.datetime.now(),
+                "ended": datetime.datetime.now(),
+                "train_task": self.model_task,
+                "dataset": self.dataset
+            }
+        ], "ModelTaskExecution")
+        url = reverse("tasks:modeltaskexecution-detail",
+                      args=(model_task_executions[0].id,))
+        response = self.client.delete(url, **self.auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_204_NO_CONTENT,
+                         response.content)
+        self.assertEqual(1, len(ModelTaskExecution.objects.all()))
+
+    def test_model_task_execution_update(self):
+        """ 测试模型任务执行修改 """
+        mtes = self.create_instances([
+            {
+                "result": "结果_0401",
+                "started": datetime.datetime.now(),
+                "ended": datetime.datetime.now(),
+                "train_task": self.model_task,
+                "dataset": self.dataset
+            },
+            {
+                "result": "结果_0402",
+                "started": datetime.datetime.now(),
+                "ended": datetime.datetime.now(),
+                "train_task": self.model_task,
+                "dataset": self.dataset
+            }
+        ], "ModelTaskExecution")
+        url = reverse("tasks:modeltaskexecution-detail", args=(mtes[1].id,))
+        data = {
+            "result": "结果_0402",
+            "started": datetime.datetime.now(),
+            "ended": datetime.datetime.now(),
+            "train_task": self.model_task.id,
+            "dataset": self.dataset.id
+        }
+        response = self.client.put(url, data, **self.auth_header)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+        self.assertEqual(mtes[0].result,
+                         ModelTaskExecution.objects.get(id=mtes[0].id).result)
+        self.assertEqual(data["result"],
+                         ModelTaskExecution.objects.get(id=mtes[1].id).result)
+
+    def test_model_task_execution_timeupdate(self):
+        """ 测试模型任务执行时间修改 """
+        mte = self.create_instances([
+            {
+                "result": "结果_05",
+                "started": datetime.datetime.now(),
+                "ended": datetime.datetime.now(),
+                "train_task": self.model_task,
+                "dataset": self.dataset
+            }
+        ], "ModelTaskExecution")[0]
+        created, modified = mte.created, mte.modified
+        time.sleep(1)
+        mte.result = "结果05_修改"
+        mte.save()
+
+        self.assertEqual(mte.created, created)
+        self.assertTrue(mte.modified > modified)
+
+    def test_model_task_execution_query(self):
+        """ 测试模型任务执行查询 """
+        mtes = self.create_instances([
+            {
+                "result": "结果_0601",
+                "started": datetime.datetime.now(),
+                "ended": datetime.datetime.now(),
+                "train_task": self.model_task,
+                "dataset": self.dataset
+            },
+            {
+                "result": "结果_0602",
+                "started": datetime.datetime.now(),
+                "ended": datetime.datetime.now(),
+                "train_task": self.model_task,
+                "dataset": self.dataset
+            }
+        ], "ModelTaskExecution")
+        url = "{0}?{1}".format(reverse("tasks:modeltaskexecution-list"),
+                               "result={0}".format(mtes[0].result))
+        response = self.client.get(url, **self.auth_header)
+        response_data = json.loads(response.content)
+
+        self.assertEqual(response.status_code,
+                         status.HTTP_200_OK,
+                         response.content)
+        self.assertEqual(1, len(response_data))
+        self.assertEqual(mtes[0].result, response_data[0]["result"])

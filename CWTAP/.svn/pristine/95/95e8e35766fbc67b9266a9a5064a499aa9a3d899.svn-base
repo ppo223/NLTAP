@@ -1,0 +1,28 @@
+from cwtap.core import viewsets
+from .models import Model, ModelInstance, ModelTask
+from .serializers import ModelSerializer, ModelInstanceSerializer, ModelTaskSerializer
+
+
+class ModelViewSet(viewsets.CWTAPViewSet):
+    queryset = Model.objects.all()
+    serializer_class = ModelSerializer
+    query_fields = ["name", "code", "details", "status", "created",
+                    "modified", "modelbase", "owner", "tenant"]
+
+
+class ModelInstanceViewSet(viewsets.CWTAPViewSet):
+    queryset = ModelInstance.objects.all()
+    serializer_class = ModelInstanceSerializer
+    query_fields = ["name", "type", "details", "status",
+                    "model", "created", "modified",
+                    "storage_location", "storage_conflict_strategy",
+                    "algorithm_instance", "owner", "tenant"]
+
+
+class ModelTaskViewSet(viewsets.CWTAPViewSet):
+    queryset = ModelTask.objects.all()
+    serializer_class = ModelTaskSerializer
+    query_fields = ["name", "type", "schedule_rule", "details",
+                    "status", "created", "modified",
+                    "dataset_generate_method", "dataset_generate_rule",
+                    "model_instance", "owner", "tenant"]

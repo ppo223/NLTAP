@@ -1,0 +1,48 @@
+from django.db import models
+from django.conf import settings
+
+from users.models import User, Tenant
+from area_of_jobs.models import AreaOfJob
+
+
+class KeywordBase(models.Model):
+    """ 词库表 """
+    name = models.CharField("词库名称", max_length=255)
+    code = models.CharField("词库代码", max_length=255)
+    type = models.CharField("词库类型", max_length=255, default="")
+    details = models.TextField("词库详情", default="")
+    status = models.IntegerField(
+        "词库状态",
+        choices=settings.STATUS_CHOICES,
+        default=settings.STATUS_ENABLE)
+    created = models.DateTimeField("词库创建时间", auto_now_add=True)
+    modified = models.DateTimeField("词库修改时间", auto_now=True)
+    area_of_job = models.ForeignKey(
+        AreaOfJob, on_delete=models.CASCADE, blank=True, null=True)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
+
+
+class Keyword(models.Model):
+    """ 关键词表 """
+    name = models.CharField("关键词名称", max_length=255)
+    pos = models.CharField("词性", max_length=20, default="")
+    emotion = models.CharField("关键词情感", max_length=255, default="")
+    level = models.CharField("关键词等级", max_length=20, default="")
+    synonym = models.TextField("关键词同义词", default="")
+    antonym = models.TextField("关键词反义词", default="")
+    status = models.IntegerField(
+        "关键词状态",
+        choices=settings.STATUS_CHOICES,
+        default=settings.STATUS_ENABLE)
+    originate_object = models.CharField("关键词来源", max_length=255, default="")
+    originate_object_id = models.IntegerField("关键词来源编号", default=0)
+    keywordbase = models.ForeignKey(KeywordBase, on_delete=models.CASCADE)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name

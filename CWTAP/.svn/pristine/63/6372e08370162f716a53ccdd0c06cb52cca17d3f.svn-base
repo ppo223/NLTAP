@@ -1,0 +1,370 @@
+import json, time
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APITestCase
+
+from users.models import Tenant, User
+from area_of_jobs.models import AreaOfJob
+from .models import KeyWordBase, KeyWord
+
+
+class Tenant_User_Public():
+    """ 创建公共测试调用 """
+
+    tenant = Tenant(name="租户01", code="tenant01", type="类型01")
+    tenant.save()
+
+    user = User(name="用户01", code="user01", password="123", tenant=tenant)
+    user.save()
+
+    aoj = AreaOfJob(name="机构01", owner=user, tenant=tenant)
+    aoj.save()
+
+    keywordbase = KeyWordBase(name="机构01", owner=user, tenant=tenant,
+                              area_of_job=aoj)
+    keywordbase.save()
+
+
+class KeyWordBaseTest(APITestCase):
+    """ 测试关键词库测试 """
+
+    def create_keywordbases(self, keywordbases):
+        result = []
+        for kb in keywordbases:
+            kb = KeyWordBase(**kb)
+            kb.save()
+            result.append(kb)
+
+        return result
+
+    def test_keywordbase_create(self):
+        """测试创建词库"""
+        url = reverse("keywords:keywordbase-list")
+        data = {"name": "词库00",
+                "code": "keywordbase00",
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(["This field is required."], json.loads(response.content)["type"])
+
+        data = {"name": "词库01",
+                "code": "keywordbase01",
+                "type": "类型01",
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("词库01", json.loads(response.content)["name"])
+        response = self.client.get(url)
+        self.assertEqual("词库01", json.loads(response.content)[0]["name"])
+
+    def test_keywordbase_delete(self):
+        """测试删除词库"""
+        url = reverse("keywords:keywordbase-list")
+        data = {
+            "name": "词库02",
+            "code": "keywordbase02",
+            "details": "你好，词库02",
+            "type": "类型02",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("词库02", json.loads(response.content)["name"])
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        url = reverse("keywords:keywordbase-list")
+        data = {
+            "name": "词库03",
+            "code": "keywordbase03",
+            "details": "你好，词库03",
+            "type": "类型03",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertEqual(2, len(KeyWordBase.objects.all()))
+        KeyWordBase.objects.filter(id=1).delete()
+        self.assertEqual(1, len(KeyWordBase.objects.all()))
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("词库03", json.loads(response.content)[0]['name'])
+
+        data = {"name": "词库02"}
+        self.assertEqual(json.loads(self.client.get(url, data).content), [])
+
+    def test_keywordbase_update(self):
+        """测试修改词库"""
+        url = reverse("keywords:keywordbase-list")
+        data = {
+            "name": "词库_0401",
+            "code": "keywordbase_0401",
+            "details": "你好，词库_0401",
+            "type": "类型_0401",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("词库_0401", json.loads(response.content)["name"])
+
+        data = {
+            "name": "词库_0402",
+            "code": "keywordbase_0402",
+            "details": "你好，词库_0402",
+            "type": "类型_0402",
+        }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("词库_0402", json.loads(response.content)["name"])
+        self.assertEqual(2, len(json.loads(self.client.get(url).content)))  #顺便测试列表长度
+
+        pk = json.loads(response.content)["id"]
+        url = reverse("keywords:keywordbase-detail", args=(pk,))
+        data = {
+            "name": "词库_0402修改",
+            "code": "keywordbase_0402修改",
+            "details": "你好，词库_0402修改",
+            "type": "类型_0402",
+        }
+        response = self.client.put(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("词库_0401", KeyWordBase.objects.get(id=1).name)
+        self.assertEqual("词库_0402修改", KeyWordBase.objects.get(id=2).name)
+
+    def test_keywordbase_timeupdate(self):
+        """测试词库时间修改"""
+        keywords = self.create_keywordbases([
+            {"name": "词库_00", "code": "keywordbase_00", "type": "类型_00"},
+        ])[0]
+        created, modified = keywords.created, keywords.modified
+        time.sleep(1)
+        keywords.name = "词库_00_修改"
+        keywords.save()
+
+        self.assertEqual(keywords.created, created)
+        self.assertTrue(keywords.modified > modified)
+
+    def test_keywordbase_query(self):
+        """ 测试查询词库 """
+        keywords = self.create_keywordbases([
+            {"name": "词库05", "code": "keywordbase05", "type": "类型05"},])
+        url = "{0}?{1}".format(reverse("keywords:keywordbase-list"),
+                               "name=词库05")
+        response = self.client.get(url)
+        query_result = json.loads(response.content)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(keywords[0].name, query_result[0]["name"])
+
+    def test_keywordbase_aoj_user_relations(self):
+        """测试词库与用户与租户与机构领域关联关系"""
+        tenant = Tenant_User_Public.tenant
+        user = Tenant_User_Public.user
+        aoj = Tenant_User_Public.aoj
+
+        keywordbases = self.create_keywordbases([
+            {
+                "name": "词库06",
+                "code": "keywordbase06",
+                "type": "类型06",
+                "owner": user,
+                "tenant": tenant,
+                "area_of_job": aoj,
+            },
+            {
+                "name": "词库07",
+                "code": "keywordbase07",
+                "type": "类型07",
+                "owner": user,
+                "tenant": tenant,
+                "area_of_job": aoj,
+            }
+        ])
+        """测试词库和租户间的关系"""
+        self.assertEqual("租户01", keywordbases[1].tenant.name)
+        self.assertEqual(keywordbases[0].tenant, keywordbases[1].tenant)
+        self.assertEqual(keywordbases[0].tenant.name, tenant.name)
+        """测试词库和用户间的关系"""
+        self.assertEqual("用户01", keywordbases[1].owner.name)
+        self.assertEqual(keywordbases[0].owner, keywordbases[1].owner)
+        self.assertEqual(keywordbases[0].owner.name, user.name)
+        """测试词库和机构领域的关系"""
+        self.assertEqual("机构01", keywordbases[1].area_of_job.name)
+        self.assertEqual(keywordbases[0].area_of_job, keywordbases[1].area_of_job)
+        self.assertEqual(keywordbases[0].area_of_job.name, aoj.name)
+        """测试词库中租户和用户间的关系"""
+        self.assertEqual("租户01", user.tenant.name)
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(keywordbases[1].owner.tenant.name, tenant.name)
+
+
+class KeyWordTest(APITestCase):
+    """ 测试关键词测试 """
+
+    def create_keywords(self, keywords):
+        result = []
+        for _ in keywords:
+            _ = KeyWord(**_)
+            _.save()
+            result.append(_)
+
+        return result
+
+    def test_keyword_create(self):
+        """测试创建关键词"""
+        url = reverse("keywords:keyword-list")
+        data = {"name": "关键词00",
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        data = {"name": "关键词01",
+                "pos": "pos01",
+                "statut": "实体01",
+                "emotion": "情感01",
+                "level": "level_01",
+                "originate_object": "关键词来源01"
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("关键词01", json.loads(response.content)["name"])
+        response = self.client.get(url)
+        self.assertEqual("关键词01", json.loads(response.content)[0]["name"])
+
+    def test_keyword_delete(self):
+        """测试关键词删除"""
+        url = reverse("keywords:keyword-list")
+        data = {"name": "关键词02",
+                "pos": "pos02",
+                "statut": "实体02",
+                "emotion": "情感02",
+                "level": "level_02",
+                "originate_object": "关键词来源02"
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("关键词02", json.loads(response.content)["name"])
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        url = reverse("keywords:keyword-list")
+        data = {"name": "关键词03",
+                "pos": "pos03",
+                "statut": "实体03",
+                "emotion": "情感03",
+                "level": "level_03",
+                "originate_object": "关键词来源03"
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertEqual(2, len(KeyWord.objects.all()))
+        KeyWord.objects.filter(id=1).delete()
+        self.assertEqual(1, len(KeyWord.objects.all()))
+        response = self.client.get(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("关键词03", json.loads(response.content)[0]['name'])
+
+        data = {"name": "关键词02"}
+        self.assertEqual(json.loads(self.client.get(url, data).content), [])
+
+    def test_keyword_update(self):
+        """测试关键词修改"""
+        url = reverse("keywords:keyword-list")
+        data = {"name": "关键词_0401",
+                "pos": "pos_0401",
+                "statut": "实体_0401",
+                "emotion": "情感_0401",
+                "level": "level_0401",
+                "originate_object": "关键词来源_0401"
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("关键词_0401", json.loads(response.content)["name"])
+
+        data = {"name": "关键词_0402",
+                "pos": "pos_0402",
+                "statut": "实体_0402",
+                "emotion": "情感_0402",
+                "level": "level_0402",
+                "originate_object": "关键词来源_0402"
+                }
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual("关键词_0402", json.loads(response.content)["name"])
+        self.assertEqual(2, len(json.loads(self.client.get(url).content)))  #顺便测试列表长度
+
+        pk = json.loads(response.content)["id"]
+        url = reverse("keywords:keyword-detail", args=(pk,))
+        data = {"name": "关键词_0402修改",
+                "pos": "pos_0402修改",
+                "statut": "实体_0402修改",
+                "emotion": "情感_0402修改",
+                "level": "level_0402修改",
+                "originate_object": "关键词来源_0402修改"
+                }
+        response = self.client.put(url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual("关键词_0401", KeyWord.objects.get(id=1).name)
+        self.assertEqual("关键词_0402修改", KeyWord.objects.get(id=2).name)
+
+    def test_keyword_query(self):
+        """ 测试关键词查询 """
+        keywords = self.create_keywords([
+            {"name": "关键词05"}])
+        url = "{0}?{1}".format(reverse("keywords:keyword-list"),
+                               "name=关键词05")
+        response = self.client.get(url)
+        query_result = json.loads(response.content)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(1, len(query_result))
+        self.assertEqual(keywords[0].name, query_result[0]["name"])
+
+    def test_keyword_aoj_user_relations(self):
+        """测试关键词与用户与租户与关键词库关联关系"""
+        tenant = Tenant_User_Public.tenant
+        user = Tenant_User_Public.user
+        keywordbase = Tenant_User_Public.keywordbase
+
+        keywords = self.create_keywords([
+            {
+                "name": "关键词06",
+                "pos": "pos06",
+                "statut": "实体06",
+                "emotion": "情感06",
+                "level": "level_06",
+                "originate_object": "关键词来源06",
+                "owner": user,
+                "tenant": tenant,
+                "keywordbase": keywordbase,
+            },
+            {
+                "name": "关键词07",
+                "pos": "pos07",
+                "statut": "实体07",
+                "emotion": "情感07",
+                "level": "level_07",
+                "originate_object": "关键词来源07",
+                "owner": user,
+                "tenant": tenant,
+                "keywordbase": keywordbase,
+            }
+        ])
+        """测试关键词和租户间的关系"""
+        self.assertEqual("租户01", keywords[1].tenant.name)
+        self.assertEqual(keywords[0].tenant, keywords[1].tenant)
+        self.assertEqual(keywords[0].tenant.name, tenant.name)
+        """测试关键词和用户间的关系"""
+        self.assertEqual("用户01", keywords[1].owner.name)
+        self.assertEqual(keywords[0].owner, keywords[1].owner)
+        self.assertEqual(keywords[0].owner.name, user.name)
+        """测试关键词和关键词库的关系"""
+        self.assertEqual("机构01", keywords[1].keywordbase.name)
+        self.assertEqual(keywords[0].keywordbase, keywords[1].keywordbase)
+        self.assertEqual(keywords[0].keywordbase.name, keywordbase.name)
+        """测试关键词中租户和用户间的关系"""
+        self.assertEqual("租户01", user.tenant.name)
+        self.assertEqual(tenant.name, user.tenant.name)
+        self.assertEqual(keywords[1].owner.tenant.name, tenant.name)
